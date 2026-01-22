@@ -68,6 +68,29 @@
     <!-- 主要內容 -->
     <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
+        <!-- 預算分類儀表板 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                    <span class="bg-emerald-100 text-emerald-600 rounded-full w-6 h-6 flex items-center justify-center text-xs">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </span>
+                    預算分類監控
+                </h2>
+                <button id="manageBudgetsBtn" class="text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-md font-medium flex items-center gap-1 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    管理分類與預算
+                </button>
+            </div>
+            
+            <div id="budgetListContainer" class="space-y-4 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                <!-- 預算列表將由 JS 插入 -->
+                <div class="text-center py-4 text-gray-400 text-sm">
+                    尚未設定任何預算分類，請點擊右上方按鈕新增。
+                </div>
+            </div>
+        </div>
+
         <!-- 上傳與辨識區塊 -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div class="p-6">
@@ -131,6 +154,13 @@
                         </div>
 
                         <form id="invoiceForm" class="space-y-4 h-full flex flex-col">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">預算分類</label>
+                                <select id="categorySelect" class="w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                    <option value="">(未分類)</option>
+                                    <!-- JS 將動態填入分類 -->
+                                </select>
+                            </div>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">消費日期</label>
@@ -196,6 +226,7 @@
                     <thead class="bg-gray-50 text-gray-900 font-semibold border-b border-gray-200">
                         <tr>
                             <th class="px-6 py-3">日期</th>
+                            <th class="px-6 py-3">分類</th>
                             <th class="px-6 py-3">店家</th>
                             <th class="px-6 py-3">號碼</th>
                             <th class="px-6 py-3">品項</th>
@@ -206,12 +237,12 @@
                     <tbody id="invoiceList" class="divide-y divide-gray-100">
                         <!-- 資料將由 JS 插入 -->
                         <tr class="text-center">
-                            <td colspan="6" class="px-6 py-8 text-gray-400">尚無資料，請上傳發票開始使用</td>
+                            <td colspan="7" class="px-6 py-8 text-gray-400">尚無資料，請上傳發票開始使用</td>
                         </tr>
                     </tbody>
                     <tfoot class="bg-gray-50 font-semibold text-gray-900">
                         <tr>
-                            <td colspan="4" class="px-6 py-3 text-right">總計：</td>
+                            <td colspan="5" class="px-6 py-3 text-right">總計：</td>
                             <td id="totalAmount" class="px-6 py-3 text-right">$0</td>
                             <td></td>
                         </tr>
@@ -234,6 +265,44 @@
                 <button id="closeApiModal" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">關閉</button>
                 <button id="deleteApiKey" class="hidden px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition">刪除 Key</button>
                 <button id="saveApiKey" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Manager Modal -->
+    <div id="categoryManagerModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 flex flex-col max-h-[90vh]">
+            <h3 class="text-xl font-bold text-gray-900 flex justify-between items-center">
+                <span>預算分類管理</span>
+                <button id="closeCategoryManager" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </h3>
+            
+            <div class="bg-gray-50 p-4 rounded-lg space-y-3">
+                <label class="block text-sm font-medium text-gray-700">新增/修改分類</label>
+                <div class="flex gap-2">
+                    <input type="text" id="newCatName" placeholder="分類名稱 (如: 旅費)" class="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                    <input type="number" id="newCatLimit" placeholder="預算金額" class="w-28 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <button id="addCategoryBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded-md transition">
+                    新增分類
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto min-h-[200px] border border-gray-100 rounded-lg">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-50 text-gray-600 sticky top-0">
+                        <tr>
+                            <th class="px-4 py-2">名稱</th>
+                            <th class="px-4 py-2 text-right">預算</th>
+                            <th class="px-4 py-2 text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categoryTableBody" class="divide-y divide-gray-100">
+                        <!-- JS 填充 -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -405,7 +474,6 @@
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(STORE_INVOICES, 'readwrite');
                 const store = tx.objectStore(STORE_INVOICES);
-                // Ensure id is a number, as autoIncrement keys are numbers
                 const req = store.delete(Number(id));
                 tx.oncomplete = () => resolve();
                 tx.onerror = () => reject(tx.error);
@@ -450,7 +518,18 @@
         const aiQuestionText = document.getElementById('aiQuestionText');
         const finishBtnText = document.getElementById('finishBtnText');
         const listeningStatus = document.getElementById('listeningStatus');
+        const categorySelect = document.getElementById('categorySelect');
         
+        // Category Manager UI
+        const manageBudgetsBtn = document.getElementById('manageBudgetsBtn');
+        const categoryManagerModal = document.getElementById('categoryManagerModal');
+        const closeCategoryManager = document.getElementById('closeCategoryManager');
+        const newCatName = document.getElementById('newCatName');
+        const newCatLimit = document.getElementById('newCatLimit');
+        const addCategoryBtn = document.getElementById('addCategoryBtn');
+        const categoryTableBody = document.getElementById('categoryTableBody');
+        const budgetListContainer = document.getElementById('budgetListContainer');
+
         // Buttons
         const btnSelectFile = document.getElementById('btnSelectFile');
         const btnOpenCamera = document.getElementById('btnOpenCamera');
@@ -478,8 +557,8 @@
         let currentBase64Image = null;
         let recognition = null;
         let finalTranscript = '';
-        let accumulatedVoiceText = ''; // Accumulates conversation context
-        let isListening = false; // State to track recognition
+        let accumulatedVoiceText = ''; 
+        let isListening = false; 
 
         // --- Notification ---
         function showToast(msg, isError = false) {
@@ -492,11 +571,163 @@
             }, 3000);
         }
 
+        // --- Budget Category Logic ---
+        let budgetCategories = [];
+
+        async function loadCategories() {
+            const stored = await getSetting('budget_categories');
+            budgetCategories = stored ? stored : [];
+            renderCategoryOptions();
+            renderCategoryTable();
+        }
+
+        async function saveCategories() {
+            await saveSetting('budget_categories', budgetCategories);
+            renderCategoryOptions();
+            renderCategoryTable();
+            // Refresh dashboard
+            const invoices = await getAllInvoices();
+            updateBudgetDashboard(invoices);
+        }
+
+        function renderCategoryOptions() {
+            // Save current selection if any
+            const currentVal = categorySelect.value;
+            categorySelect.innerHTML = '<option value="">(未分類)</option>';
+            budgetCategories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat.id;
+                opt.textContent = cat.name;
+                categorySelect.appendChild(opt);
+            });
+            // Restore selection if possible
+            if (budgetCategories.find(c => c.id === currentVal)) {
+                categorySelect.value = currentVal;
+            }
+        }
+
+        function renderCategoryTable() {
+            categoryTableBody.innerHTML = '';
+            if (budgetCategories.length === 0) {
+                categoryTableBody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-center text-gray-400">尚無分類</td></tr>';
+                return;
+            }
+            budgetCategories.forEach(cat => {
+                const row = document.createElement('tr');
+                row.className = "hover:bg-gray-50";
+                row.innerHTML = `
+                    <td class="px-4 py-2 font-medium">${cat.name}</td>
+                    <td class="px-4 py-2 text-right font-mono">$${Number(cat.limit).toLocaleString()}</td>
+                    <td class="px-4 py-2 text-center">
+                        <button onclick="removeCategory('${cat.id}')" class="text-red-500 hover:text-red-700 transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </td>
+                `;
+                categoryTableBody.appendChild(row);
+            });
+        }
+
+        // Global for button onclick
+        window.removeCategory = async (id) => {
+            if(confirm('確定刪除此分類？已關聯的紀錄將變為「未分類」。')) {
+                budgetCategories = budgetCategories.filter(c => c.id !== id);
+                await saveCategories();
+                showToast('分類已刪除');
+            }
+        };
+
+        addCategoryBtn.addEventListener('click', async () => {
+            const name = newCatName.value.trim();
+            const limit = parseFloat(newCatLimit.value);
+            
+            if (!name) {
+                showToast('請輸入分類名稱', true);
+                return;
+            }
+            if (!limit || limit <= 0) {
+                showToast('請輸入有效的預算金額', true);
+                return;
+            }
+
+            // Generate simple ID
+            const id = 'cat_' + Date.now();
+            budgetCategories.push({ id, name, limit });
+            
+            await saveCategories();
+            newCatName.value = '';
+            newCatLimit.value = '';
+            showToast('分類已新增');
+        });
+
+        manageBudgetsBtn.addEventListener('click', () => {
+            categoryManagerModal.classList.remove('hidden');
+        });
+
+        closeCategoryManager.addEventListener('click', () => {
+            categoryManagerModal.classList.add('hidden');
+        });
+
+        async function updateBudgetDashboard(invoices) {
+            budgetListContainer.innerHTML = '';
+            
+            if (budgetCategories.length === 0) {
+                budgetListContainer.innerHTML = '<div class="text-center py-4 text-gray-400 text-sm">尚未設定任何預算分類，請點擊右上方按鈕新增。</div>';
+                return;
+            }
+
+            // Calculate spent per category
+            const categorySpent = {};
+            // Initialize
+            budgetCategories.forEach(cat => categorySpent[cat.id] = 0);
+            
+            invoices.forEach(inv => {
+                if (inv.categoryId && categorySpent.hasOwnProperty(inv.categoryId)) {
+                    categorySpent[inv.categoryId] += (Number(inv.amount) || 0);
+                }
+            });
+
+            // Render bars
+            budgetCategories.forEach(cat => {
+                const spent = categorySpent[cat.id];
+                const limit = Number(cat.limit);
+                const percentage = Math.min((spent / limit) * 100, 100);
+                const remaining = limit - spent;
+                
+                let barColor = "bg-emerald-500";
+                let statusColor = "text-gray-500";
+                
+                if (percentage >= 100) {
+                    barColor = "bg-red-500";
+                    statusColor = "text-red-600 font-bold";
+                } else if (percentage >= 80) {
+                    barColor = "bg-orange-400";
+                    statusColor = "text-orange-500";
+                }
+
+                const item = document.createElement('div');
+                item.className = "bg-gray-50 p-3 rounded-lg border border-gray-100";
+                item.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-medium text-gray-800 text-sm">${cat.name}</span>
+                        <span class="text-xs text-gray-500">已用 $${spent.toLocaleString()} / $${limit.toLocaleString()}</span>
+                    </div>
+                    <div class="relative w-full bg-gray-200 rounded-full h-2 mb-1">
+                        <div class="absolute left-0 top-0 h-full rounded-full transition-all duration-500 ${barColor}" style="width: ${percentage}%"></div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs ${statusColor}">剩餘額度: $${remaining.toLocaleString()}</span>
+                    </div>
+                `;
+                budgetListContainer.appendChild(item);
+            });
+        }
+
         // --- API Key Logic ---
         async function checkApiKey() {
             const key = await getSetting('gemini_api_key');
             if (key) {
-                apiKeyInput.value = key; // Masking happens via input type password
+                apiKeyInput.value = key; 
                 deleteApiKeyBtn.classList.remove('hidden');
             } else {
                 apiKeyInput.value = '';
@@ -564,7 +795,7 @@
             reuploadOverlay.classList.add('hidden');
             currentBase64Image = null;
             analyzeBtn.disabled = true;
-            fileInput.value = ''; // Reset file input
+            fileInput.value = ''; 
         }
 
         // File Selection Triggers
@@ -592,7 +823,6 @@
         // --- Camera Logic ---
         async function startCamera() {
             try {
-                // Constraints
                 const constraints = {
                     video: {
                         facingMode: facingMode
@@ -631,38 +861,32 @@
         captureBtn.addEventListener('click', () => {
             if (!mediaStream) return;
             
-            // 1. Get DOM Rects
             const guideRect = document.getElementById('cameraGuide').getBoundingClientRect();
             const videoRect = cameraVideo.getBoundingClientRect();
 
-            // 2. Calculate displayed video dimensions (considering object-fit: cover)
             const videoRatio = cameraVideo.videoWidth / cameraVideo.videoHeight;
             const elementRatio = videoRect.width / videoRect.height;
 
             let renderWidth, renderHeight, offsetX, offsetY;
 
             if (videoRatio > elementRatio) {
-                // Video is wider than container: vertical fit, horizontal crop
                 renderHeight = videoRect.height;
                 renderWidth = renderHeight * videoRatio;
                 offsetX = (renderWidth - videoRect.width) / 2;
                 offsetY = 0;
             } else {
-                // Video is taller than container: horizontal fit, vertical crop
                 renderWidth = videoRect.width;
                 renderHeight = renderWidth / videoRatio;
                 offsetX = 0;
                 offsetY = (renderHeight - videoRect.height) / 2;
             }
 
-            // 3. Calculate crop coordinates relative to the rendered video
             const guideRelativeLeft = guideRect.left - videoRect.left;
             const guideRelativeTop = guideRect.top - videoRect.top;
 
             const cropX_displayed = guideRelativeLeft + offsetX;
             const cropY_displayed = guideRelativeTop + offsetY;
 
-            // 4. Map to source video coordinates
             const scale = cameraVideo.videoWidth / renderWidth;
 
             const sourceX = cropX_displayed * scale;
@@ -670,29 +894,25 @@
             const sourceW = guideRect.width * scale;
             const sourceH = guideRect.height * scale;
 
-            // 5. Draw to canvas
             cameraCanvas.width = sourceW;
             cameraCanvas.height = sourceH;
             const ctx = cameraCanvas.getContext('2d');
 
             ctx.drawImage(
                 cameraVideo,
-                sourceX, sourceY, sourceW, sourceH, // Source
-                0, 0, sourceW, sourceH              // Destination
+                sourceX, sourceY, sourceW, sourceH, 
+                0, 0, sourceW, sourceH              
             );
 
-            // Convert to base64
             const base64 = cameraCanvas.toDataURL('image/jpeg', 0.9);
             
             setPreviewImage(base64);
             stopCamera();
         });
 
-        // Switch Camera
         switchCameraBtn.addEventListener('click', () => {
             facingMode = facingMode === 'user' ? 'environment' : 'user';
             if (mediaStream) {
-                // Stop current stream before starting new one
                 mediaStream.getTracks().forEach(track => track.stop());
                 startCamera();
             }
@@ -713,7 +933,6 @@
             setLoading(true);
 
             try {
-                // Remove data URL header
                 const base64Data = currentBase64Image.split(',')[1];
                 
                 const prompt = `
@@ -749,7 +968,6 @@
                 const data = await response.json();
                 const text = data.candidates[0].content.parts[0].text;
                 
-                // Clean markdown if present
                 const cleanJson = text.replace(/```json|```/g, '').trim();
                 const result = JSON.parse(cleanJson);
 
@@ -771,8 +989,8 @@
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
             recognition.lang = 'zh-TW';
-            recognition.interimResults = true; // Show real-time results
-            recognition.continuous = true;     // Keep listening even if user pauses
+            recognition.interimResults = true; 
+            recognition.continuous = true;     
 
             recognition.onstart = () => {
                 isListening = true;
@@ -785,8 +1003,6 @@
 
             recognition.onend = () => {
                 isListening = false;
-                // If it ends naturally (silence) or manually stopped, we check if we should process
-                // Processing is triggered by button click usually, to allow long pauses
                 listeningStatus.textContent = "已暫停 (請點擊開始)";
             };
 
@@ -807,9 +1023,8 @@
             recognition.onerror = (event) => {
                 console.error('Speech recognition error', event.error);
                 isListening = false;
-                if (event.error === 'no-speech') return; // Ignore if just silence
+                if (event.error === 'no-speech') return; 
                 
-                // Don't close overlay on error, just show toast
                 showToast('語音辨識瞬時錯誤: ' + event.error + '，請重試', true);
             };
         } else {
@@ -817,10 +1032,9 @@
         }
 
         btnVoiceInput.addEventListener('click', () => {
-             accumulatedVoiceText = ''; // New session
-             aiQuestionBox.classList.add('hidden'); // Hide previous AI question
+             accumulatedVoiceText = ''; 
+             aiQuestionBox.classList.add('hidden'); 
              
-             // Check if already listening to avoid error
              if (recognition && !isListening) {
                  try {
                     recognition.start();
@@ -833,14 +1047,11 @@
         finishVoiceBtn.addEventListener('click', () => {
             if (recognition) recognition.stop();
             
-            // Only analyze if text exists
             if (finalTranscript.trim()) {
-                // Append to history
                 accumulatedVoiceText += (accumulatedVoiceText ? ' ' : '') + finalTranscript;
                 showToast('語音輸入完成，正在分析...', false);
                 parseVoiceWithGemini(accumulatedVoiceText);
             } else {
-                // If clicked "Reply" but said nothing, maybe re-start listening?
                 if (recognition && !isListening) {
                     try { recognition.start(); } catch(e) {}
                 }
@@ -874,7 +1085,6 @@
             }
 
             try {
-                // Strict prompt to force structured output and interactive questioning
                 const prompt = `
                     你是一個專業的記帳助手。請分析使用者的語音文字："${fullText}"。
                     目前的日期是：${new Date().toISOString().split('T')[0]}。
@@ -922,33 +1132,28 @@
                 const result = JSON.parse(jsonText);
                 
                 if (result.status === 'incomplete' && result.question) {
-                    // AI needs clarification
                     aiQuestionText.textContent = result.question;
                     aiQuestionBox.classList.remove('hidden');
                     speakText(result.question);
                     
-                    // Pre-fill what we have so far
                     fillForm(result.data);
                     
-                    // Reset transcript for next turn
                     finalTranscript = ''; 
                     voiceResultDisplay.innerHTML = '<span class="opacity-50">請回答 AI 的問題...</span>';
                     finishBtnText.textContent = "回答完畢，送出";
                     
-                    // Auto start listening after a short delay for TTS to start
                     setTimeout(() => {
-                        if (recognition && !isListening) { // Safe check
+                        if (recognition && !isListening) { 
                             try { recognition.start(); } catch(e) {}
                         }
                     }, 1000);
                     
                 } else {
-                    // Success
                     fillForm(result.data);
                     showToast('分析完成！');
                     voiceOverlay.classList.add('hidden');
                     aiQuestionBox.classList.add('hidden');
-                    accumulatedVoiceText = ''; // Reset session
+                    accumulatedVoiceText = ''; 
                 }
 
             } catch (e) {
@@ -990,14 +1195,20 @@
             let total = 0;
 
             if (invoices.length === 0) {
-                invoiceList.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-gray-400">尚無資料</td></tr>`;
+                invoiceList.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">尚無資料，請上傳發票開始使用</td></tr>`;
             } else {
                 invoices.forEach(inv => {
                     total += Number(inv.amount) || 0;
+                    
+                    // Find category name
+                    const cat = budgetCategories.find(c => c.id === inv.categoryId);
+                    const catName = cat ? cat.name : '<span class="text-gray-400 text-xs">(未分類)</span>';
+
                     const row = document.createElement('tr');
                     row.className = "hover:bg-gray-50 transition";
                     row.innerHTML = `
                         <td class="px-6 py-4 whitespace-nowrap text-gray-900">${inv.date}</td>
+                        <td class="px-6 py-4 font-medium text-blue-600">${catName}</td>
                         <td class="px-6 py-4 font-medium">${inv.storeName || '-'}</td>
                         <td class="px-6 py-4 font-mono text-xs bg-gray-50 rounded">${inv.invoiceNumber || '-'}</td>
                         <td class="px-6 py-4 text-xs text-gray-500 max-w-xs truncate" title="${inv.items || ''}">${inv.items || '-'}</td>
@@ -1014,6 +1225,8 @@
 
             countEl.textContent = invoices.length;
             totalAmountEl.textContent = '$' + total.toLocaleString();
+            
+            updateBudgetDashboard(invoices);
         }
 
         // Global scope for onclick
@@ -1037,6 +1250,7 @@
         invoiceForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const data = {
+                categoryId: categorySelect.value, // Save Category ID
                 date: document.getElementById('date').value,
                 invoiceNumber: document.getElementById('invoiceNumber').value.toUpperCase(),
                 amount: parseFloat(document.getElementById('amount').value),
@@ -1048,10 +1262,10 @@
             await addInvoice(data);
             showToast('儲存成功');
             
-            // Clear form but keep preview for reference? No, standard behavior is clear.
             invoiceForm.reset();
             resetImage();
             
+            // Restore category if wanted? or reset to default
             renderList();
         });
 
@@ -1083,7 +1297,6 @@
             reader.onload = async (event) => {
                 try {
                     const text = event.target.result;
-                    // Remove BOM if present
                     const content = text.replace(/^\uFEFF/, '');
                     const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
                     
@@ -1092,33 +1305,65 @@
                         return;
                     }
 
-                    // Simple check for header match (optional but good practice)
-                    // We assume: 日期,店家名稱,發票號碼,金額,品項 (order matters)
+                    // Check header for format detection
+                    const header = lines[0];
+                    const isNewFormat = header.includes('分類');
                     
                     let successCount = 0;
                     
-                    // Start from index 1 to skip header
                     for (let i = 1; i < lines.length; i++) {
                         const line = lines[i];
                         const cols = parseCSVLine(line);
                         
-                        if (cols.length >= 4) { // At least date, store, inv#, amount
-                            const data = {
-                                date: cols[0] || new Date().toISOString().split('T')[0],
-                                storeName: cols[1] || '',
-                                invoiceNumber: cols[2] || '',
-                                amount: parseFloat(cols[3]) || 0,
-                                items: cols[4] || '',
-                                timestamp: Date.now()
-                            };
-                            await addInvoice(data);
-                            successCount++;
+                        let data = {};
+                        
+                        if (isNewFormat) {
+                            // New Format: Date, Category, Store, Invoice, Amount, Items
+                            if (cols.length >= 5) {
+                                const catName = cols[1];
+                                const foundCat = budgetCategories.find(c => c.name === catName);
+                                const categoryId = foundCat ? foundCat.id : '';
+                                
+                                data = {
+                                    date: cols[0],
+                                    categoryId: categoryId,
+                                    storeName: cols[2],
+                                    invoiceNumber: cols[3],
+                                    amount: parseFloat(cols[4]),
+                                    items: cols[5],
+                                    timestamp: Date.now()
+                                };
+                            }
+                        } else {
+                            // Old Format: Date, Store, Invoice, Amount, Items
+                            if (cols.length >= 4) {
+                                data = {
+                                    date: cols[0],
+                                    categoryId: '', // No category in old format
+                                    storeName: cols[1],
+                                    invoiceNumber: cols[2],
+                                    amount: parseFloat(cols[3]),
+                                    items: cols[4],
+                                    timestamp: Date.now()
+                                };
+                            }
+                        }
+                        
+                        if (data.date) {
+                             data.date = data.date || new Date().toISOString().split('T')[0];
+                             data.storeName = data.storeName || '';
+                             data.invoiceNumber = data.invoiceNumber || '';
+                             data.amount = data.amount || 0;
+                             data.items = data.items || '';
+                             
+                             await addInvoice(data);
+                             successCount++;
                         }
                     }
                     
                     await renderList();
                     showToast(`成功匯入 ${successCount} 筆資料`);
-                    importInput.value = ''; // Reset input
+                    importInput.value = ''; 
 
                 } catch (err) {
                     console.error("Import Error:", err);
@@ -1128,7 +1373,6 @@
             reader.readAsText(file);
         });
 
-        // Helper to parse CSV line correctly handling quotes and commas
         function parseCSVLine(text) {
             const result = [];
             let startValueIndex = 0;
@@ -1143,17 +1387,14 @@
                     startValueIndex = i + 1;
                 }
             }
-            // Push the last value
             result.push(cleanCSVValue(text.substring(startValueIndex)));
             return result;
         }
 
         function cleanCSVValue(val) {
             val = val.trim();
-            // Remove surrounding quotes if present
             if (val.startsWith('"') && val.endsWith('"')) {
                 val = val.substring(1, val.length - 1);
-                // Unescape double quotes
                 val = val.replace(/""/g, '"');
             }
             return val;
@@ -1166,14 +1407,17 @@
                 return;
             }
 
-            // Add BOM for Excel Chinese support
             let csvContent = "\uFEFF";
-            csvContent += "日期,店家名稱,發票號碼,金額,品項\n";
+            csvContent += "日期,分類,店家名稱,發票號碼,金額,品項\n";
 
             invoices.forEach(inv => {
+                const cat = budgetCategories.find(c => c.id === inv.categoryId);
+                const catName = cat ? cat.name : '';
+
                 const row = [
                     inv.date,
-                    `"${(inv.storeName || '').replace(/"/g, '""')}"`, // Escape quotes
+                    `"${catName}"`,
+                    `"${(inv.storeName || '').replace(/"/g, '""')}"`,
                     `"${(inv.invoiceNumber || '')}"`,
                     inv.amount,
                     `"${(inv.items || '').replace(/"/g, '""')}"`
@@ -1184,7 +1428,6 @@
             const fileName = `發票紀錄_${new Date().toISOString().slice(0,10)}.csv`;
             const file = new File([csvContent], fileName, { type: "text/csv;charset=utf-8;" });
 
-            // 優先嘗試使用 Web Share API 分享檔案 (適用於手機)
             if (navigator.canShare && navigator.canShare({ files: [file] })) {
                 try {
                     await navigator.share({
@@ -1193,18 +1436,16 @@
                         text: '這是我的發票記帳 CSV 檔案'
                     });
                     showToast('分享成功');
-                    return; // 如果分享成功或使用者取消，就不執行下載
+                    return; 
                 } catch (error) {
                     if (error.name !== 'AbortError') {
                         console.error('分享失敗，改為下載:', error);
-                        // 如果不是使用者取消 (AbortError)，則繼續執行下方的下載邏輯
                     } else {
-                        return; // 使用者取消分享
+                        return; 
                     }
                 }
             }
 
-            // 如果不支援分享 (例如電腦版) 或分享失敗，則回退到下載
             const url = URL.createObjectURL(file);
             const link = document.createElement("a");
             link.setAttribute("href", url);
@@ -1218,6 +1459,7 @@
         // Initialize
         (async () => {
             await checkApiKey();
+            await loadCategories(); // Load cats first
             await renderList();
         })();
 
