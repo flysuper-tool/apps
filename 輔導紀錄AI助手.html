@@ -66,6 +66,15 @@
     <!-- Main Content -->
     <main class="flex-grow max-w-5xl mx-auto px-4 py-6 w-full space-y-6">
 
+        <!-- Data Persistence Warning -->
+        <div class="bg-amber-50 border-l-4 border-amber-500 p-4 rounded shadow-sm flex items-start gap-3">
+            <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5"></i>
+            <div class="text-sm text-amber-800">
+                <p class="font-bold">資料保存警示：</p>
+                <p>所有紀錄僅儲存在此瀏覽器的暫存空間 (IndexedDB)。若<span class="font-bold">清除瀏覽紀錄、更換手機或電腦</span>，資料將會遺失。請務必養成定期「匯出 CSV」備份的習慣。</p>
+            </div>
+        </div>
+
         <!-- API Key Settings Panel (Hidden by default unless no key) -->
         <div id="settingsPanel" class="hidden glass-panel rounded-xl shadow-lg p-6 mb-6 border-l-4 border-blue-500 fade-in">
             <h2 class="text-lg font-bold mb-3 flex items-center gap-2">
@@ -181,14 +190,20 @@
                 <h3 class="font-bold text-slate-700 flex items-center gap-2">
                     <i class="fa-solid fa-clock-rotate-left"></i> 紀錄列表
                 </h3>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
+                    <!-- Import CSV Button -->
+                    <button onclick="document.getElementById('csvInput').click()" class="text-sm bg-white border border-slate-300 text-slate-600 px-3 py-1.5 rounded hover:bg-slate-50 transition flex items-center gap-2 shadow-sm">
+                        <i class="fa-solid fa-file-import text-amber-600"></i> <span class="hidden sm:inline">匯入</span>
+                    </button>
+                    <input type="file" id="csvInput" accept=".csv" class="hidden" onchange="importCSV(this)">
+
                     <!-- Share File Button -->
                     <button onclick="shareAllRecords()" class="text-sm bg-white border border-blue-200 text-blue-600 px-3 py-1.5 rounded hover:bg-blue-50 transition flex items-center gap-2 shadow-sm" title="分享檔案到 LINE/雲端">
                         <i class="fa-solid fa-share-nodes"></i> <span class="hidden sm:inline">分享檔案</span>
                     </button>
                     <!-- Export CSV Button -->
                     <button onclick="exportToCSV()" class="text-sm bg-white border border-slate-300 text-slate-700 px-3 py-1.5 rounded hover:bg-slate-50 transition flex items-center gap-2 shadow-sm">
-                        <i class="fa-solid fa-file-csv text-green-600"></i> <span class="hidden sm:inline">匯出 CSV</span>
+                        <i class="fa-solid fa-file-csv text-green-600"></i> <span class="hidden sm:inline">匯出</span>
                     </button>
                 </div>
             </div>
@@ -815,6 +830,115 @@
                 navigator.clipboard.writeText(shareText);
                 showToast('已複製文字到剪貼簿', 'success');
             }
+        }
+        
+        // --- CSV Import Function ---
+        function importCSV(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const text = e.target.result;
+                const rows = parseCSV(text);
+                
+                if (rows.length === 0) {
+                    showToast('CSV 格式錯誤或無資料', 'error');
+                    return;
+                }
+
+                let addedCount = 0;
+                // Start from 1 to skip header (assuming header exists)
+                // If the first row looks like data, we might need better detection, 
+                // but standard export has "時間,原始敘述,潤飾後紀錄"
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (row.length < 3) continue; // Skip empty or malformed rows
+
+                    // row[0] is time string, row[1] is raw, row[2] is refined
+                    // We generate a new timestamp to ensure it's valid ISO, or try to parse
+                    // But to keep sort order, we should probably try to respect the original time or just use current time?
+                    // The exported format is locale string, which is hard to parse back exactly to ISO.
+                    // Strategy: Use current time for import to bring them to "top", OR try to parse.
+                    // Let's use current time for simplicity and to indicate "imported just now".
+                    // OR: To act as a backup restore, we might want original dates.
+                    // Since locale string varies by browser, parsing is risky. 
+                    // Let's stick to generating a new ISO string to guarantee valid data structure.
+                    
+                    // Actually, if it's a backup, preserving dates is better. 
+                    // Let's try to parse, fallback to now.
+                    let timestamp = new Date().toISOString();
+                    const parsedDate = new Date(row[0]);
+                    if (!isNaN(parsedDate.getTime())) {
+                        timestamp = parsedDate.toISOString();
+                    }
+
+                    const record = {
+                        timestamp: timestamp,
+                        raw: row[1] || "",
+                        refined: row[2] || ""
+                    };
+                    
+                    if(record.raw || record.refined) {
+                        await addRecord(record);
+                        addedCount++;
+                    }
+                }
+
+                showToast(`成功匯入 ${addedCount} 筆資料`, 'success');
+                loadRecords();
+                input.value = ''; // Reset input
+            };
+            reader.readAsText(file);
+        }
+
+        // Simple CSV Parser handling quotes
+        function parseCSV(text) {
+            // Remove BOM if present
+            if (text.charCodeAt(0) === 0xFEFF) {
+                text = text.slice(1);
+            }
+            
+            const rows = [];
+            let currentRow = [];
+            let currentVal = '';
+            let insideQuote = false;
+            
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                const nextChar = text[i+1];
+
+                if (insideQuote) {
+                    if (char === '"' && nextChar === '"') {
+                        currentVal += '"';
+                        i++; // Skip next quote
+                    } else if (char === '"') {
+                        insideQuote = false;
+                    } else {
+                        currentVal += char;
+                    }
+                } else {
+                    if (char === '"') {
+                        insideQuote = true;
+                    } else if (char === ',') {
+                        currentRow.push(currentVal);
+                        currentVal = '';
+                    } else if (char === '\n' || char === '\r') {
+                        if (char === '\r' && nextChar === '\n') i++; // Handle CRLF
+                        currentRow.push(currentVal);
+                        rows.push(currentRow);
+                        currentRow = [];
+                        currentVal = '';
+                    } else {
+                        currentVal += char;
+                    }
+                }
+            }
+            if (currentVal || currentRow.length > 0) {
+                currentRow.push(currentVal);
+                rows.push(currentRow);
+            }
+            return rows;
         }
 
         // --- Utilities ---
