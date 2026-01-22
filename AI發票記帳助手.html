@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 發票辨識與記帳助手</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; }
+        /* 隱藏滾動條但保持功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        video { transform: scaleX(1); } /* 預設不鏡像，自拍鏡頭可視情況調整 */
+        
+        /* 語音波紋動畫 */
+        .voice-wave {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: rgba(59, 130, 246, 0.2);
+            animation: ripple 1.5s infinite;
+        }
+        .voice-wave:nth-child(2) { animation-delay: 0.5s; }
+        .voice-wave:nth-child(3) { animation-delay: 1s; }
+        
+        @keyframes ripple {
+            0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen pb-20">
+
+    <!-- 頂部導航 -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <h1 class="text-xl font-bold text-gray-900">AI 發票記帳助手</h1>
+                </div>
+                <div>
+                    <button id="apiKeyBtn" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-md transition flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                        設定 API Key
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 資料保存警語 -->
+    <div class="bg-amber-50 border-b border-amber-200">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-start gap-3">
+            <svg class="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <p class="text-sm text-amber-800 leading-snug">
+                <strong>重要提醒：</strong> 本系統資料僅儲存於此瀏覽器中 (IndexedDB)，若清除瀏覽器快取、使用無痕模式或更換裝置，資料將會遺失。請務必定期使用下方「匯出 CSV」功能自行備份資料。
+            </p>
+        </div>
+    </div>
+
+    <!-- 主要內容 -->
+    <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+        <!-- 上傳與辨識區塊 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="p-6">
+                <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <span class="bg-blue-100 text-blue-600 rounded-full w-6 h-6 flex items-center justify-center text-xs">1</span>
+                    新增紀錄
+                </h2>
+                
+                <div class="flex flex-col md:flex-row gap-6">
+                    <!-- 圖片預覽與操作區 -->
+                    <div class="w-full md:w-1/3 space-y-3">
+                        <!-- 隱藏的檔案輸入框 -->
+                        <input type="file" id="fileInput" accept="image/*" class="hidden">
+                        
+                        <!-- 拖曳與顯示區域 -->
+                        <div id="dropZone" class="border-2 border-dashed border-gray-300 rounded-lg h-64 flex flex-col items-center justify-center relative bg-gray-50 overflow-hidden transition-colors hover:bg-gray-100 group">
+                            
+                            <!-- 預設顯示 (未有圖片時) -->
+                            <div id="uploadPlaceholder" class="text-center p-4 w-full h-full flex flex-col items-center justify-center z-10">
+                                <svg class="w-10 h-10 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                <p class="text-sm text-gray-500 mb-4">拖曳圖片至此，或選擇方式</p>
+                                
+                                <div class="flex gap-2">
+                                    <button id="btnSelectFile" class="bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md text-sm hover:bg-gray-50 hover:text-blue-600 transition flex items-center gap-1 shadow-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                                        選擇檔案
+                                    </button>
+                                    <button id="btnOpenCamera" class="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-700 transition flex items-center gap-1 shadow-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                        拍照
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- 圖片預覽 (有圖片時顯示) -->
+                            <img id="previewImg" class="hidden absolute inset-0 w-full h-full object-contain z-20 bg-gray-50 pointer-events-none" />
+                            
+                            <!-- 重新上傳按鈕 (有圖片時浮現) -->
+                            <div id="reuploadOverlay" class="hidden absolute inset-0 z-30 bg-black bg-opacity-40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200">
+                                <div class="flex gap-2">
+                                    <button id="btnReSelect" class="bg-white text-gray-800 px-3 py-1.5 rounded-md text-sm hover:bg-gray-100 transition shadow-sm">更換檔案</button>
+                                    <button id="btnReCamera" class="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-700 transition shadow-sm">重拍</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="analyzeBtn" disabled class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg transition shadow-sm flex justify-center items-center gap-2">
+                            <span id="btnText">開始 AI 辨識</span>
+                            <svg id="loadingIcon" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        </button>
+                    </div>
+
+                    <!-- 結果編輯表單 -->
+                    <div class="w-full md:w-2/3 relative">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-gray-700 font-semibold">發票明細</h3>
+                            <button type="button" id="btnVoiceInput" class="hidden text-sm bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-full transition flex items-center gap-1.5 font-medium shadow-sm">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+                                AI 語音輸入
+                            </button>
+                        </div>
+
+                        <form id="invoiceForm" class="space-y-4 h-full flex flex-col">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">消費日期</label>
+                                    <input type="date" id="date" required class="w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">發票號碼</label>
+                                    <input type="text" id="invoiceNumber" placeholder="AB-12345678" class="w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 focus:ring-blue-500 focus:border-blue-500 uppercase">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">消費金額</label>
+                                    <input type="number" id="amount" required placeholder="0" class="w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">店家名稱</label>
+                                    <input type="text" id="storeName" placeholder="例如：7-ELEVEN" class="w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 focus:ring-blue-500 focus:border-blue-500">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">購買品項 (選填)</label>
+                                <textarea id="items" rows="3" placeholder="例如：咖啡、麵包..." class="w-full border border-gray-300 rounded-md shadow-sm px-3 py-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
+                            </div>
+                            
+                            <div class="mt-auto pt-4 flex gap-3">
+                                <button type="submit" id="saveBtn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2 rounded-lg transition shadow-sm">
+                                    確認並儲存
+                                </button>
+                                <button type="button" id="clearBtn" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition">
+                                    清空
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 歷史紀錄區塊 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="p-6 border-b border-gray-100 flex justify-between items-center flex-wrap gap-4">
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                    <span class="bg-indigo-100 text-indigo-600 rounded-full w-6 h-6 flex items-center justify-center text-xs">2</span>
+                    已儲存的發票 (<span id="count">0</span>)
+                </h2>
+                <div class="flex gap-2 flex-wrap">
+                    <input type="file" id="importInput" accept=".csv" class="hidden">
+                    <button id="importBtn" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        匯入 CSV
+                    </button>
+                    <button id="exportBtn" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+                        匯出 / 分享 CSV
+                    </button>
+                    <button id="deleteAllBtn" class="bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg text-sm font-medium transition">
+                        全部刪除
+                    </button>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm text-gray-600">
+                    <thead class="bg-gray-50 text-gray-900 font-semibold border-b border-gray-200">
+                        <tr>
+                            <th class="px-6 py-3">日期</th>
+                            <th class="px-6 py-3">店家</th>
+                            <th class="px-6 py-3">號碼</th>
+                            <th class="px-6 py-3">品項</th>
+                            <th class="px-6 py-3 text-right">金額</th>
+                            <th class="px-6 py-3 text-center">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoiceList" class="divide-y divide-gray-100">
+                        <!-- 資料將由 JS 插入 -->
+                        <tr class="text-center">
+                            <td colspan="6" class="px-6 py-8 text-gray-400">尚無資料，請上傳發票開始使用</td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="bg-gray-50 font-semibold text-gray-900">
+                        <tr>
+                            <td colspan="4" class="px-6 py-3 text-right">總計：</td>
+                            <td id="totalAmount" class="px-6 py-3 text-right">$0</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- API Key Modal -->
+    <div id="apiModal" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 class="text-xl font-bold text-gray-900">設定 Gemini API Key</h3>
+            <p class="text-sm text-gray-500">
+                為了使用 AI 辨識功能，請輸入您的 Google Gemini API Key。金鑰將安全地儲存在您的瀏覽器 IndexedDB 中。
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-600 hover:underline">取得 API Key</a>
+            </p>
+            <input type="password" id="apiKeyInput" placeholder="貼上您的 API Key" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+            <div class="flex gap-3 justify-end pt-2">
+                <button id="closeApiModal" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">關閉</button>
+                <button id="deleteApiKey" class="hidden px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition">刪除 Key</button>
+                <button id="saveApiKey" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Camera Modal -->
+    <div id="cameraModal" class="fixed inset-0 bg-black z-[110] hidden flex flex-col">
+        <!-- 相機操作列 -->
+        <div class="absolute top-0 left-0 right-0 p-4 flex justify-between items-center z-20 bg-gradient-to-b from-black/50 to-transparent">
+            <button id="closeCameraBtn" class="text-white p-2 rounded-full hover:bg-white/20">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <span class="text-white font-medium">拍攝發票</span>
+            <div class="w-8"></div> <!-- Spacer for alignment -->
+        </div>
+
+        <!-- 視訊畫面 -->
+        <div class="flex-1 relative flex items-center justify-center bg-black overflow-hidden">
+             <video id="cameraVideo" autoplay playsinline class="absolute w-full h-full object-cover"></video>
+             <!-- 對焦框引導 -->
+             <div id="cameraGuide" class="absolute w-[90%] h-[80%] border-2 border-white/70 rounded-lg pointer-events-none z-10 flex flex-col justify-between p-2 shadow-[0_0_0_2000px_rgba(0,0,0,0.6)]">
+                 <div class="flex justify-between">
+                     <div class="w-8 h-8 border-l-4 border-t-4 border-white rounded-tl-sm"></div>
+                     <div class="w-8 h-8 border-r-4 border-t-4 border-white rounded-tr-sm"></div>
+                 </div>
+                 <div class="text-center text-white/90 text-sm font-medium drop-shadow-md">請將發票置於框內</div>
+                 <div class="flex justify-between">
+                    <div class="w-8 h-8 border-l-4 border-b-4 border-white rounded-bl-sm"></div>
+                    <div class="w-8 h-8 border-r-4 border-b-4 border-white rounded-br-sm"></div>
+                </div>
+             </div>
+        </div>
+
+        <!-- 底部控制列 -->
+        <div class="bg-black p-6 flex justify-center items-center gap-8 pb-10">
+            <button id="switchCameraBtn" class="text-white p-3 rounded-full bg-gray-800 hover:bg-gray-700 transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            </button>
+            <button id="captureBtn" class="w-16 h-16 rounded-full border-4 border-white flex items-center justify-center hover:bg-white/20 transition transform active:scale-95">
+                <div class="w-12 h-12 bg-white rounded-full"></div>
+            </button>
+            <div class="w-12"></div> <!-- Spacer for alignment -->
+        </div>
+        <canvas id="cameraCanvas" class="hidden"></canvas>
+    </div>
+    
+    <!-- Voice Listening Overlay -->
+    <div id="voiceOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-95 z-[120] hidden flex flex-col items-center justify-center p-4 transition-all duration-300">
+        
+        <!-- AI Question Area (Hidden by default) -->
+        <div id="aiQuestionBox" class="hidden mb-6 bg-white/10 backdrop-blur-md p-4 rounded-xl border border-white/20 text-center max-w-sm w-full mx-auto animate-pulse shadow-lg transform translate-y-2">
+            <div class="flex items-center justify-center gap-2 mb-2">
+                <span class="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded-full">AI 提問</span>
+            </div>
+            <p id="aiQuestionText" class="text-white text-lg font-medium tracking-wide">請問金額是多少？</p>
+        </div>
+
+        <!-- Animation -->
+        <div class="relative w-40 h-40 flex items-center justify-center mb-6">
+            <div class="voice-wave"></div>
+            <div class="voice-wave"></div>
+            <div class="z-10 bg-blue-600 rounded-full p-6 shadow-lg relative">
+                <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+            </div>
+        </div>
+        
+        <p id="listeningStatus" class="text-gray-400 text-sm mb-4">正在聆聽...</p>
+        
+        <!-- Live Text Display -->
+        <div id="voiceResultDisplay" class="text-white text-xl font-medium text-center max-w-2xl mb-8 min-h-[4rem] px-4 border-b border-gray-700 pb-8 w-full flex items-center justify-center">
+            <span class="opacity-50">請開始說話...</span>
+        </div>
+
+        <div class="flex gap-4">
+            <button id="cancelVoiceBtn" class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-full transition flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                取消
+            </button>
+            <button id="finishVoiceBtn" class="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-full transition font-medium flex items-center gap-2 shadow-lg transform active:scale-95">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                <span id="finishBtnText">說完了，開始分析</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition duration-300 z-[100]">
+        操作成功
+    </div>
+
+    <script>
+        // --- IndexedDB Helper ---
+        const DB_NAME = 'InvoiceScannerDB';
+        const DB_VERSION = 1;
+        const STORE_INVOICES = 'invoices';
+        const STORE_SETTINGS = 'settings';
+
+        const dbPromise = new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                if (!db.objectStoreNames.contains(STORE_INVOICES)) {
+                    db.createObjectStore(STORE_INVOICES, { keyPath: 'id', autoIncrement: true });
+                }
+                if (!db.objectStoreNames.contains(STORE_SETTINGS)) {
+                    db.createObjectStore(STORE_SETTINGS, { keyPath: 'key' });
+                }
+            };
+            request.onsuccess = (e) => resolve(e.target.result);
+            request.onerror = (e) => reject(e.target.error);
+        });
+
+        async function getSetting(key) {
+            const db = await dbPromise;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_SETTINGS, 'readonly');
+                const store = tx.objectStore(STORE_SETTINGS);
+                const req = store.get(key);
+                req.onsuccess = () => resolve(req.result ? req.result.value : null);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function saveSetting(key, value) {
+            const db = await dbPromise;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_SETTINGS, 'readwrite');
+                const store = tx.objectStore(STORE_SETTINGS);
+                const req = store.put({ key, value });
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function deleteSetting(key) {
+             const db = await dbPromise;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_SETTINGS, 'readwrite');
+                const store = tx.objectStore(STORE_SETTINGS);
+                const req = store.delete(key);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function addInvoice(data) {
+            const db = await dbPromise;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_INVOICES, 'readwrite');
+                const store = tx.objectStore(STORE_INVOICES);
+                const req = store.add(data);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function getAllInvoices() {
+            const db = await dbPromise;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_INVOICES, 'readonly');
+                const store = tx.objectStore(STORE_INVOICES);
+                const req = store.getAll();
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function deleteInvoice(id) {
+            const db = await dbPromise;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_INVOICES, 'readwrite');
+                const store = tx.objectStore(STORE_INVOICES);
+                // Ensure id is a number, as autoIncrement keys are numbers
+                const req = store.delete(Number(id));
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function clearAllInvoices() {
+            const db = await dbPromise;
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_INVOICES, 'readwrite');
+                const store = tx.objectStore(STORE_INVOICES);
+                const req = store.clear();
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        // --- UI Elements ---
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const previewImg = document.getElementById('previewImg');
+        const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+        const reuploadOverlay = document.getElementById('reuploadOverlay');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const btnText = document.getElementById('btnText');
+        const loadingIcon = document.getElementById('loadingIcon');
+        const invoiceForm = document.getElementById('invoiceForm');
+        const invoiceList = document.getElementById('invoiceList');
+        const totalAmountEl = document.getElementById('totalAmount');
+        const countEl = document.getElementById('count');
+        const exportBtn = document.getElementById('exportBtn');
+        const importBtn = document.getElementById('importBtn');
+        const importInput = document.getElementById('importInput');
+        const deleteAllBtn = document.getElementById('deleteAllBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const btnVoiceInput = document.getElementById('btnVoiceInput');
+        const voiceOverlay = document.getElementById('voiceOverlay');
+        const voiceResultDisplay = document.getElementById('voiceResultDisplay');
+        const finishVoiceBtn = document.getElementById('finishVoiceBtn');
+        const cancelVoiceBtn = document.getElementById('cancelVoiceBtn');
+        const aiQuestionBox = document.getElementById('aiQuestionBox');
+        const aiQuestionText = document.getElementById('aiQuestionText');
+        const finishBtnText = document.getElementById('finishBtnText');
+        const listeningStatus = document.getElementById('listeningStatus');
+        
+        // Buttons
+        const btnSelectFile = document.getElementById('btnSelectFile');
+        const btnOpenCamera = document.getElementById('btnOpenCamera');
+        const btnReSelect = document.getElementById('btnReSelect');
+        const btnReCamera = document.getElementById('btnReCamera');
+
+        // Modal Elements
+        const apiKeyBtn = document.getElementById('apiKeyBtn');
+        const apiModal = document.getElementById('apiModal');
+        const closeApiModal = document.getElementById('closeApiModal');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const saveApiKeyBtn = document.getElementById('saveApiKey');
+        const deleteApiKeyBtn = document.getElementById('deleteApiKey');
+        
+        // Camera Elements
+        const cameraModal = document.getElementById('cameraModal');
+        const cameraVideo = document.getElementById('cameraVideo');
+        const closeCameraBtn = document.getElementById('closeCameraBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const switchCameraBtn = document.getElementById('switchCameraBtn');
+        const cameraCanvas = document.getElementById('cameraCanvas');
+        let mediaStream = null;
+        let facingMode = 'environment'; // Default to rear camera
+
+        let currentBase64Image = null;
+        let recognition = null;
+        let finalTranscript = '';
+        let accumulatedVoiceText = ''; // Accumulates conversation context
+        let isListening = false; // State to track recognition
+
+        // --- Notification ---
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg transform translate-y-0 opacity-100 transition duration-300 z-[100] ${isError ? 'bg-red-600 text-white' : 'bg-gray-800 text-white'}`;
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // --- API Key Logic ---
+        async function checkApiKey() {
+            const key = await getSetting('gemini_api_key');
+            if (key) {
+                apiKeyInput.value = key; // Masking happens via input type password
+                deleteApiKeyBtn.classList.remove('hidden');
+            } else {
+                apiKeyInput.value = '';
+                deleteApiKeyBtn.classList.add('hidden');
+            }
+            return key;
+        }
+
+        apiKeyBtn.addEventListener('click', () => {
+            checkApiKey();
+            apiModal.classList.remove('hidden');
+        });
+
+        closeApiModal.addEventListener('click', () => apiModal.classList.add('hidden'));
+        
+        saveApiKeyBtn.addEventListener('click', async () => {
+            const key = apiKeyInput.value.trim();
+            if (!key) {
+                showToast('請輸入 API Key', true);
+                return;
+            }
+            await saveSetting('gemini_api_key', key);
+            showToast('API Key 已儲存');
+            apiModal.classList.add('hidden');
+            deleteApiKeyBtn.classList.remove('hidden');
+        });
+
+        deleteApiKeyBtn.addEventListener('click', async () => {
+            if(confirm('確定要刪除儲存的 API Key 嗎？')) {
+                await deleteSetting('gemini_api_key');
+                apiKeyInput.value = '';
+                deleteApiKeyBtn.classList.add('hidden');
+                showToast('API Key 已移除');
+            }
+        });
+
+        // --- Image Handling ---
+        function handleFile(file) {
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                showToast('請上傳圖片檔案', true);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                setPreviewImage(e.target.result);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function setPreviewImage(base64) {
+            currentBase64Image = base64;
+            previewImg.src = base64;
+            previewImg.classList.remove('hidden');
+            uploadPlaceholder.classList.add('hidden');
+            reuploadOverlay.classList.remove('hidden');
+            analyzeBtn.disabled = false;
+        }
+        
+        function resetImage() {
+            previewImg.src = '';
+            previewImg.classList.add('hidden');
+            uploadPlaceholder.classList.remove('hidden');
+            reuploadOverlay.classList.add('hidden');
+            currentBase64Image = null;
+            analyzeBtn.disabled = true;
+            fileInput.value = ''; // Reset file input
+        }
+
+        // File Selection Triggers
+        btnSelectFile.addEventListener('click', () => fileInput.click());
+        btnReSelect.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+        
+        // Drag and Drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('bg-blue-50', 'border-blue-500');
+        });
+        
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('bg-blue-50', 'border-blue-500');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('bg-blue-50', 'border-blue-500');
+            handleFile(e.dataTransfer.files[0]);
+        });
+        
+        // --- Camera Logic ---
+        async function startCamera() {
+            try {
+                // Constraints
+                const constraints = {
+                    video: {
+                        facingMode: facingMode
+                    }
+                };
+                
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                cameraVideo.srcObject = mediaStream;
+                cameraModal.classList.remove('hidden');
+                
+            } catch (err) {
+                console.error("Camera Error:", err);
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    showToast('請允許瀏覽器使用相機權限', true);
+                } else if (err.name === 'NotFoundError') {
+                    showToast('找不到相機裝置', true);
+                } else {
+                    showToast('無法開啟相機: ' + err.message, true);
+                }
+            }
+        }
+
+        function stopCamera() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            cameraModal.classList.add('hidden');
+        }
+
+        btnOpenCamera.addEventListener('click', startCamera);
+        btnReCamera.addEventListener('click', startCamera);
+        closeCameraBtn.addEventListener('click', stopCamera);
+        
+        // Capture Photo (with Crop)
+        captureBtn.addEventListener('click', () => {
+            if (!mediaStream) return;
+            
+            // 1. Get DOM Rects
+            const guideRect = document.getElementById('cameraGuide').getBoundingClientRect();
+            const videoRect = cameraVideo.getBoundingClientRect();
+
+            // 2. Calculate displayed video dimensions (considering object-fit: cover)
+            const videoRatio = cameraVideo.videoWidth / cameraVideo.videoHeight;
+            const elementRatio = videoRect.width / videoRect.height;
+
+            let renderWidth, renderHeight, offsetX, offsetY;
+
+            if (videoRatio > elementRatio) {
+                // Video is wider than container: vertical fit, horizontal crop
+                renderHeight = videoRect.height;
+                renderWidth = renderHeight * videoRatio;
+                offsetX = (renderWidth - videoRect.width) / 2;
+                offsetY = 0;
+            } else {
+                // Video is taller than container: horizontal fit, vertical crop
+                renderWidth = videoRect.width;
+                renderHeight = renderWidth / videoRatio;
+                offsetX = 0;
+                offsetY = (renderHeight - videoRect.height) / 2;
+            }
+
+            // 3. Calculate crop coordinates relative to the rendered video
+            const guideRelativeLeft = guideRect.left - videoRect.left;
+            const guideRelativeTop = guideRect.top - videoRect.top;
+
+            const cropX_displayed = guideRelativeLeft + offsetX;
+            const cropY_displayed = guideRelativeTop + offsetY;
+
+            // 4. Map to source video coordinates
+            const scale = cameraVideo.videoWidth / renderWidth;
+
+            const sourceX = cropX_displayed * scale;
+            const sourceY = cropY_displayed * scale;
+            const sourceW = guideRect.width * scale;
+            const sourceH = guideRect.height * scale;
+
+            // 5. Draw to canvas
+            cameraCanvas.width = sourceW;
+            cameraCanvas.height = sourceH;
+            const ctx = cameraCanvas.getContext('2d');
+
+            ctx.drawImage(
+                cameraVideo,
+                sourceX, sourceY, sourceW, sourceH, // Source
+                0, 0, sourceW, sourceH              // Destination
+            );
+
+            // Convert to base64
+            const base64 = cameraCanvas.toDataURL('image/jpeg', 0.9);
+            
+            setPreviewImage(base64);
+            stopCamera();
+        });
+
+        // Switch Camera
+        switchCameraBtn.addEventListener('click', () => {
+            facingMode = facingMode === 'user' ? 'environment' : 'user';
+            if (mediaStream) {
+                // Stop current stream before starting new one
+                mediaStream.getTracks().forEach(track => track.stop());
+                startCamera();
+            }
+        });
+
+
+        // --- Gemini AI (Image) Logic ---
+        analyzeBtn.addEventListener('click', async () => {
+            const apiKey = await getSetting('gemini_api_key');
+            if (!apiKey) {
+                showToast('請先設定 API Key', true);
+                apiModal.classList.remove('hidden');
+                return;
+            }
+
+            if (!currentBase64Image) return;
+
+            setLoading(true);
+
+            try {
+                // Remove data URL header
+                const base64Data = currentBase64Image.split(',')[1];
+                
+                const prompt = `
+                    分析這張發票圖片。請回傳純 JSON 格式，不要包含 Markdown 標記 (\`\`\`json ... \`\`\`)。
+                    需要擷取的欄位如下 (如果找不到請回傳 null)：
+                    {
+                        "date": "YYYY-MM-DD (西元年)",
+                        "invoiceNumber": "發票號碼 (例如 AB-12345678)",
+                        "amount": Integer (總金額),
+                        "storeName": "店家名稱",
+                        "items": "購買品項簡述 (合併成一個字串)"
+                    }
+                    如果是電子發票，請盡量辨識詳細。
+                `;
+
+                const payload = {
+                    contents: [{
+                        parts: [
+                            { text: prompt },
+                            { inlineData: { mimeType: "image/jpeg", data: base64Data } }
+                        ]
+                    }]
+                };
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error('API 請求失敗');
+
+                const data = await response.json();
+                const text = data.candidates[0].content.parts[0].text;
+                
+                // Clean markdown if present
+                const cleanJson = text.replace(/```json|```/g, '').trim();
+                const result = JSON.parse(cleanJson);
+
+                fillForm(result);
+                
+                showToast('辨識完成！請確認資料');
+
+            } catch (error) {
+                console.error(error);
+                showToast('辨識失敗，請重試或手動輸入', true);
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // --- Voice Logic & Multi-turn Conversation ---
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            btnVoiceInput.classList.remove('hidden');
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'zh-TW';
+            recognition.interimResults = true; // Show real-time results
+            recognition.continuous = true;     // Keep listening even if user pauses
+
+            recognition.onstart = () => {
+                isListening = true;
+                finalTranscript = '';
+                voiceResultDisplay.innerHTML = '<span class="opacity-50">請開始說話...</span>';
+                voiceOverlay.classList.remove('hidden');
+                finishBtnText.textContent = "說完了，開始分析";
+                listeningStatus.textContent = "正在聆聽...";
+            };
+
+            recognition.onend = () => {
+                isListening = false;
+                // If it ends naturally (silence) or manually stopped, we check if we should process
+                // Processing is triggered by button click usually, to allow long pauses
+                listeningStatus.textContent = "已暫停 (請點擊開始)";
+            };
+
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
+                        finalTranscript += event.results[i][0].transcript;
+                    } else {
+                        interimTranscript += event.results[i][0].transcript;
+                    }
+                }
+                
+                const display = finalTranscript + '<span class="text-gray-400">' + interimTranscript + '</span>';
+                voiceResultDisplay.innerHTML = display || '<span class="opacity-50">...</span>';
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error', event.error);
+                isListening = false;
+                if (event.error === 'no-speech') return; // Ignore if just silence
+                
+                // Don't close overlay on error, just show toast
+                showToast('語音辨識瞬時錯誤: ' + event.error + '，請重試', true);
+            };
+        } else {
+            console.log("Browser does not support Speech API");
+        }
+
+        btnVoiceInput.addEventListener('click', () => {
+             accumulatedVoiceText = ''; // New session
+             aiQuestionBox.classList.add('hidden'); // Hide previous AI question
+             
+             // Check if already listening to avoid error
+             if (recognition && !isListening) {
+                 try {
+                    recognition.start();
+                 } catch(e) {
+                     console.log("Recognition start failed (might be already started):", e);
+                 }
+             }
+        });
+
+        finishVoiceBtn.addEventListener('click', () => {
+            if (recognition) recognition.stop();
+            
+            // Only analyze if text exists
+            if (finalTranscript.trim()) {
+                // Append to history
+                accumulatedVoiceText += (accumulatedVoiceText ? ' ' : '') + finalTranscript;
+                showToast('語音輸入完成，正在分析...', false);
+                parseVoiceWithGemini(accumulatedVoiceText);
+            } else {
+                // If clicked "Reply" but said nothing, maybe re-start listening?
+                if (recognition && !isListening) {
+                    try { recognition.start(); } catch(e) {}
+                }
+            }
+        });
+
+        cancelVoiceBtn.addEventListener('click', () => {
+            finalTranscript = ''; 
+            accumulatedVoiceText = '';
+            if (recognition) recognition.stop();
+            voiceOverlay.classList.add('hidden');
+            aiQuestionBox.classList.add('hidden');
+        });
+
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-TW';
+                utterance.rate = 1.1;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        async function parseVoiceWithGemini(fullText) {
+            const apiKey = await getSetting('gemini_api_key');
+            if (!apiKey) {
+                showToast('請先設定 API Key 以使用智慧分析', true);
+                document.getElementById('items').value += (document.getElementById('items').value ? ' ' : '') + fullText;
+                voiceOverlay.classList.add('hidden');
+                return;
+            }
+
+            try {
+                // Strict prompt to force structured output and interactive questioning
+                const prompt = `
+                    你是一個專業的記帳助手。請分析使用者的語音文字："${fullText}"。
+                    目前的日期是：${new Date().toISOString().split('T')[0]}。
+
+                    請提取以下欄位：
+                    - date: 消費日期 (YYYY-MM-DD)
+                    - amount: 金額 (整數)
+                    - storeName: 店家名稱
+                    - items: 購買品項 (請勿包含金額或店家，僅保留商品名稱)
+                    - invoiceNumber: 發票號碼
+
+                    邏輯判斷：
+                    1. 必須要有「金額」。如果沒有金額，請視為資料不完整。
+                    2. 如果缺少「店家名稱」，請視為不完整 (除非使用者說不知名或路邊攤)。
+                    3. 若資料不完整或有歧義，請設定 status 為 "incomplete"，並生成一個簡短的問題 (question) 來詢問使用者。
+                    4. 若資料完整，status 為 "complete"，question 欄位留空。
+
+                    回傳純 JSON 格式，不要 Markdown：
+                    {
+                        "status": "complete" | "incomplete",
+                        "question": "你的提問 (若 incomplete)",
+                        "data": {
+                            "date": "...",
+                            "amount": ...,
+                            "storeName": "...",
+                            "items": "...",
+                            "invoiceNumber": "..."
+                        }
+                    }
+                `;
+
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }]
+                };
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error('API 請求失敗');
+                const data = await response.json();
+                const jsonText = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+                const result = JSON.parse(jsonText);
+                
+                if (result.status === 'incomplete' && result.question) {
+                    // AI needs clarification
+                    aiQuestionText.textContent = result.question;
+                    aiQuestionBox.classList.remove('hidden');
+                    speakText(result.question);
+                    
+                    // Pre-fill what we have so far
+                    fillForm(result.data);
+                    
+                    // Reset transcript for next turn
+                    finalTranscript = ''; 
+                    voiceResultDisplay.innerHTML = '<span class="opacity-50">請回答 AI 的問題...</span>';
+                    finishBtnText.textContent = "回答完畢，送出";
+                    
+                    // Auto start listening after a short delay for TTS to start
+                    setTimeout(() => {
+                        if (recognition && !isListening) { // Safe check
+                            try { recognition.start(); } catch(e) {}
+                        }
+                    }, 1000);
+                    
+                } else {
+                    // Success
+                    fillForm(result.data);
+                    showToast('分析完成！');
+                    voiceOverlay.classList.add('hidden');
+                    aiQuestionBox.classList.add('hidden');
+                    accumulatedVoiceText = ''; // Reset session
+                }
+
+            } catch (e) {
+                console.error(e);
+                showToast('語意分析失敗，已填入備註欄', true);
+                document.getElementById('items').value += ' ' + fullText;
+                voiceOverlay.classList.add('hidden');
+            }
+        }
+
+        function fillForm(data) {
+            if (!data) return;
+            if (data.date) document.getElementById('date').value = data.date;
+            if (data.invoiceNumber) document.getElementById('invoiceNumber').value = data.invoiceNumber;
+            if (data.amount) document.getElementById('amount').value = data.amount;
+            if (data.storeName) document.getElementById('storeName').value = data.storeName;
+            if (data.items) document.getElementById('items').value = data.items;
+        }
+
+        function setLoading(isLoading) {
+            if (isLoading) {
+                analyzeBtn.disabled = true;
+                btnText.textContent = '辨識中...';
+                loadingIcon.classList.remove('hidden');
+            } else {
+                analyzeBtn.disabled = false;
+                btnText.textContent = '開始 AI 辨識';
+                loadingIcon.classList.add('hidden');
+            }
+        }
+
+        // --- Data Management ---
+        async function renderList() {
+            const invoices = await getAllInvoices();
+            // Sort by date desc
+            invoices.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            invoiceList.innerHTML = '';
+            let total = 0;
+
+            if (invoices.length === 0) {
+                invoiceList.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-gray-400">尚無資料</td></tr>`;
+            } else {
+                invoices.forEach(inv => {
+                    total += Number(inv.amount) || 0;
+                    const row = document.createElement('tr');
+                    row.className = "hover:bg-gray-50 transition";
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-gray-900">${inv.date}</td>
+                        <td class="px-6 py-4 font-medium">${inv.storeName || '-'}</td>
+                        <td class="px-6 py-4 font-mono text-xs bg-gray-50 rounded">${inv.invoiceNumber || '-'}</td>
+                        <td class="px-6 py-4 text-xs text-gray-500 max-w-xs truncate" title="${inv.items || ''}">${inv.items || '-'}</td>
+                        <td class="px-6 py-4 text-right font-bold text-gray-900">$${Number(inv.amount).toLocaleString()}</td>
+                        <td class="px-6 py-4 text-center">
+                            <button onclick="removeInvoice(${inv.id})" class="text-red-500 hover:text-red-700 transition p-1 rounded hover:bg-red-50">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </td>
+                    `;
+                    invoiceList.appendChild(row);
+                });
+            }
+
+            countEl.textContent = invoices.length;
+            totalAmountEl.textContent = '$' + total.toLocaleString();
+        }
+
+        // Global scope for onclick
+        window.removeInvoice = async (id) => {
+            if (!id) {
+                showToast('刪除失敗: ID 無效', true);
+                return;
+            }
+            if(confirm('確定刪除此筆資料？')) {
+                try {
+                    await deleteInvoice(id);
+                    await renderList();
+                    showToast('已刪除');
+                } catch(e) {
+                    console.error(e);
+                    showToast('刪除失敗: ' + (e.message || '未知錯誤'), true);
+                }
+            }
+        };
+
+        invoiceForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                date: document.getElementById('date').value,
+                invoiceNumber: document.getElementById('invoiceNumber').value.toUpperCase(),
+                amount: parseFloat(document.getElementById('amount').value),
+                storeName: document.getElementById('storeName').value,
+                items: document.getElementById('items').value,
+                timestamp: Date.now()
+            };
+
+            await addInvoice(data);
+            showToast('儲存成功');
+            
+            // Clear form but keep preview for reference? No, standard behavior is clear.
+            invoiceForm.reset();
+            resetImage();
+            
+            renderList();
+        });
+
+        clearBtn.addEventListener('click', () => {
+             invoiceForm.reset();
+             resetImage();
+        });
+
+        deleteAllBtn.addEventListener('click', async () => {
+            const count = parseInt(countEl.textContent);
+            if (count > 0 && confirm(`確定要刪除全部 ${count} 筆資料嗎？此動作無法復原。`)) {
+                await clearAllInvoices();
+                renderList();
+                showToast('已清空所有資料');
+            }
+        });
+
+        // --- Import / Export Logic ---
+        
+        importBtn.addEventListener('click', () => {
+            importInput.click();
+        });
+
+        importInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const text = event.target.result;
+                    // Remove BOM if present
+                    const content = text.replace(/^\uFEFF/, '');
+                    const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+                    
+                    if (lines.length < 2) {
+                        showToast('CSV 檔案格式錯誤或無資料', true);
+                        return;
+                    }
+
+                    // Simple check for header match (optional but good practice)
+                    // We assume: 日期,店家名稱,發票號碼,金額,品項 (order matters)
+                    
+                    let successCount = 0;
+                    
+                    // Start from index 1 to skip header
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i];
+                        const cols = parseCSVLine(line);
+                        
+                        if (cols.length >= 4) { // At least date, store, inv#, amount
+                            const data = {
+                                date: cols[0] || new Date().toISOString().split('T')[0],
+                                storeName: cols[1] || '',
+                                invoiceNumber: cols[2] || '',
+                                amount: parseFloat(cols[3]) || 0,
+                                items: cols[4] || '',
+                                timestamp: Date.now()
+                            };
+                            await addInvoice(data);
+                            successCount++;
+                        }
+                    }
+                    
+                    await renderList();
+                    showToast(`成功匯入 ${successCount} 筆資料`);
+                    importInput.value = ''; // Reset input
+
+                } catch (err) {
+                    console.error("Import Error:", err);
+                    showToast('匯入失敗，請確認檔案格式', true);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // Helper to parse CSV line correctly handling quotes and commas
+        function parseCSVLine(text) {
+            const result = [];
+            let startValueIndex = 0;
+            let inQuotes = false;
+            
+            for (let i = 0; i < text.length; i++) {
+                if (text[i] === '"') {
+                    inQuotes = !inQuotes;
+                } else if (text[i] === ',' && !inQuotes) {
+                    let val = text.substring(startValueIndex, i);
+                    result.push(cleanCSVValue(val));
+                    startValueIndex = i + 1;
+                }
+            }
+            // Push the last value
+            result.push(cleanCSVValue(text.substring(startValueIndex)));
+            return result;
+        }
+
+        function cleanCSVValue(val) {
+            val = val.trim();
+            // Remove surrounding quotes if present
+            if (val.startsWith('"') && val.endsWith('"')) {
+                val = val.substring(1, val.length - 1);
+                // Unescape double quotes
+                val = val.replace(/""/g, '"');
+            }
+            return val;
+        }
+
+        exportBtn.addEventListener('click', async () => {
+            const invoices = await getAllInvoices();
+            if (invoices.length === 0) {
+                showToast('沒有資料可匯出', true);
+                return;
+            }
+
+            // Add BOM for Excel Chinese support
+            let csvContent = "\uFEFF";
+            csvContent += "日期,店家名稱,發票號碼,金額,品項\n";
+
+            invoices.forEach(inv => {
+                const row = [
+                    inv.date,
+                    `"${(inv.storeName || '').replace(/"/g, '""')}"`, // Escape quotes
+                    `"${(inv.invoiceNumber || '')}"`,
+                    inv.amount,
+                    `"${(inv.items || '').replace(/"/g, '""')}"`
+                ];
+                csvContent += row.join(",") + "\n";
+            });
+
+            const fileName = `發票紀錄_${new Date().toISOString().slice(0,10)}.csv`;
+            const file = new File([csvContent], fileName, { type: "text/csv;charset=utf-8;" });
+
+            // 優先嘗試使用 Web Share API 分享檔案 (適用於手機)
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: 'AI 發票助手紀錄',
+                        text: '這是我的發票記帳 CSV 檔案'
+                    });
+                    showToast('分享成功');
+                    return; // 如果分享成功或使用者取消，就不執行下載
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('分享失敗，改為下載:', error);
+                        // 如果不是使用者取消 (AbortError)，則繼續執行下方的下載邏輯
+                    } else {
+                        return; // 使用者取消分享
+                    }
+                }
+            }
+
+            // 如果不支援分享 (例如電腦版) 或分享失敗，則回退到下載
+            const url = URL.createObjectURL(file);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", fileName);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('已開始下載');
+        });
+
+        // Initialize
+        (async () => {
+            await checkApiKey();
+            await renderList();
+        })();
+
+    </script>
+</body>
+</html>
