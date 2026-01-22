@@ -35,7 +35,7 @@
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 min-h-screen">
+<body class="bg-gray-50 text-gray-800 min-h-screen pb-20">
 
     <!-- 頂部導航 -->
     <nav class="bg-white shadow-sm sticky top-0 z-50">
@@ -54,6 +54,16 @@
             </div>
         </div>
     </nav>
+
+    <!-- 資料保存警語 -->
+    <div class="bg-amber-50 border-b border-amber-200">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-start gap-3">
+            <svg class="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <p class="text-sm text-amber-800 leading-snug">
+                <strong>重要提醒：</strong> 本系統資料僅儲存於此瀏覽器中 (IndexedDB)，若清除瀏覽器快取、使用無痕模式或更換裝置，資料將會遺失。請務必定期使用下方「匯出 CSV」功能自行備份資料。
+            </p>
+        </div>
+    </div>
 
     <!-- 主要內容 -->
     <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -165,10 +175,15 @@
                     <span class="bg-indigo-100 text-indigo-600 rounded-full w-6 h-6 flex items-center justify-center text-xs">2</span>
                     已儲存的發票 (<span id="count">0</span>)
                 </h2>
-                <div class="flex gap-2">
+                <div class="flex gap-2 flex-wrap">
+                    <input type="file" id="importInput" accept=".csv" class="hidden">
+                    <button id="importBtn" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        匯入 CSV
+                    </button>
                     <button id="exportBtn" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        匯出 CSV
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+                        匯出 / 分享 CSV
                     </button>
                     <button id="deleteAllBtn" class="bg-red-50 text-red-600 hover:bg-red-100 px-4 py-2 rounded-lg text-sm font-medium transition">
                         全部刪除
@@ -422,6 +437,8 @@
         const totalAmountEl = document.getElementById('totalAmount');
         const countEl = document.getElementById('count');
         const exportBtn = document.getElementById('exportBtn');
+        const importBtn = document.getElementById('importBtn');
+        const importInput = document.getElementById('importInput');
         const deleteAllBtn = document.getElementById('deleteAllBtn');
         const clearBtn = document.getElementById('clearBtn');
         const btnVoiceInput = document.getElementById('btnVoiceInput');
@@ -1052,6 +1069,96 @@
             }
         });
 
+        // --- Import / Export Logic ---
+        
+        importBtn.addEventListener('click', () => {
+            importInput.click();
+        });
+
+        importInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const text = event.target.result;
+                    // Remove BOM if present
+                    const content = text.replace(/^\uFEFF/, '');
+                    const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+                    
+                    if (lines.length < 2) {
+                        showToast('CSV 檔案格式錯誤或無資料', true);
+                        return;
+                    }
+
+                    // Simple check for header match (optional but good practice)
+                    // We assume: 日期,店家名稱,發票號碼,金額,品項 (order matters)
+                    
+                    let successCount = 0;
+                    
+                    // Start from index 1 to skip header
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i];
+                        const cols = parseCSVLine(line);
+                        
+                        if (cols.length >= 4) { // At least date, store, inv#, amount
+                            const data = {
+                                date: cols[0] || new Date().toISOString().split('T')[0],
+                                storeName: cols[1] || '',
+                                invoiceNumber: cols[2] || '',
+                                amount: parseFloat(cols[3]) || 0,
+                                items: cols[4] || '',
+                                timestamp: Date.now()
+                            };
+                            await addInvoice(data);
+                            successCount++;
+                        }
+                    }
+                    
+                    await renderList();
+                    showToast(`成功匯入 ${successCount} 筆資料`);
+                    importInput.value = ''; // Reset input
+
+                } catch (err) {
+                    console.error("Import Error:", err);
+                    showToast('匯入失敗，請確認檔案格式', true);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // Helper to parse CSV line correctly handling quotes and commas
+        function parseCSVLine(text) {
+            const result = [];
+            let startValueIndex = 0;
+            let inQuotes = false;
+            
+            for (let i = 0; i < text.length; i++) {
+                if (text[i] === '"') {
+                    inQuotes = !inQuotes;
+                } else if (text[i] === ',' && !inQuotes) {
+                    let val = text.substring(startValueIndex, i);
+                    result.push(cleanCSVValue(val));
+                    startValueIndex = i + 1;
+                }
+            }
+            // Push the last value
+            result.push(cleanCSVValue(text.substring(startValueIndex)));
+            return result;
+        }
+
+        function cleanCSVValue(val) {
+            val = val.trim();
+            // Remove surrounding quotes if present
+            if (val.startsWith('"') && val.endsWith('"')) {
+                val = val.substring(1, val.length - 1);
+                // Unescape double quotes
+                val = val.replace(/""/g, '"');
+            }
+            return val;
+        }
+
         exportBtn.addEventListener('click', async () => {
             const invoices = await getAllInvoices();
             if (invoices.length === 0) {
@@ -1074,15 +1181,38 @@
                 csvContent += row.join(",") + "\n";
             });
 
-            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-            const url = URL.createObjectURL(blob);
+            const fileName = `發票紀錄_${new Date().toISOString().slice(0,10)}.csv`;
+            const file = new File([csvContent], fileName, { type: "text/csv;charset=utf-8;" });
+
+            // 優先嘗試使用 Web Share API 分享檔案 (適用於手機)
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try {
+                    await navigator.share({
+                        files: [file],
+                        title: 'AI 發票助手紀錄',
+                        text: '這是我的發票記帳 CSV 檔案'
+                    });
+                    showToast('分享成功');
+                    return; // 如果分享成功或使用者取消，就不執行下載
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('分享失敗，改為下載:', error);
+                        // 如果不是使用者取消 (AbortError)，則繼續執行下方的下載邏輯
+                    } else {
+                        return; // 使用者取消分享
+                    }
+                }
+            }
+
+            // 如果不支援分享 (例如電腦版) 或分享失敗，則回退到下載
+            const url = URL.createObjectURL(file);
             const link = document.createElement("a");
             link.setAttribute("href", url);
-            const fileName = `發票紀錄_${new Date().toISOString().slice(0,10)}.csv`;
             link.setAttribute("download", fileName);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            showToast('已開始下載');
         });
 
         // Initialize
