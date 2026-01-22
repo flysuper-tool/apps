@@ -170,9 +170,18 @@
                         </button>
                     </div>
                 </div>
-                <div id="historyList" class="overflow-y-auto flex-grow space-y-3 pr-2" style="max-h: 300px;">
+                <div id="historyList" class="overflow-y-auto flex-grow space-y-3 pr-2 mb-3" style="max-h: 300px;">
                     <!-- History items will be injected here -->
                     <p class="text-xs text-gray-400 text-center py-4">尚無紀錄</p>
+                </div>
+
+                <!-- Warning Message -->
+                <div class="mt-auto p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3 shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5 text-sm"></i>
+                    <div class="text-xs text-amber-800 leading-relaxed">
+                        <span class="font-bold block mb-0.5 text-amber-900">資料保存警示：</span>
+                        所有紀錄僅儲存在此瀏覽器的暫存空間 (Local Storage)。若清除瀏覽紀錄、更換手機或電腦，資料將會遺失。請務必養成定期「匯出 CSV」備份的習慣。
+                    </div>
                 </div>
             </div>
         </div>
