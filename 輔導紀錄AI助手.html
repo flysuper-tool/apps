@@ -93,8 +93,9 @@
             </div>
 
             <!-- Tutorial Image (Hidden by default) -->
-            <div id="tutorialBox" class="hidden mb-4 overflow-hidden rounded-lg border border-slate-200 shadow-sm bg-slate-100">
-                <img src="https://flysuper-tool.github.io/apps/Gemini_APIkey.png" alt="API Key 申請步驟教學" class="w-full h-auto">
+            <div id="tutorialBox" class="hidden mb-4 overflow-hidden rounded-lg border border-slate-200 shadow-sm bg-slate-100 group relative">
+                <img src="https://flysuper-tool.github.io/apps/Gemini_APIkey.png" alt="API Key 申請步驟教學" class="w-full h-auto cursor-zoom-in hover:opacity-95 transition" onclick="openImageModal(this.src)" title="點擊放大瀏覽">
+                <div class="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded pointer-events-none">點擊放大</div>
             </div>
             
             <!-- Modified Layout for Mobile: Stack vertically on small screens, row on larger -->
@@ -242,9 +243,15 @@
     </main>
 
     <!-- Notification Toast -->
-    <div id="toast" class="fixed bottom-5 right-5 transform translate-y-20 opacity-0 transition-all duration-300 z-50 bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
+    <div id="toast" class="fixed bottom-5 right-5 transform translate-y-20 opacity-0 transition-all duration-300 z-[70] bg-slate-800 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
         <i id="toastIcon" class="fa-solid fa-circle-check text-green-400"></i>
         <span id="toastMsg">操作成功</span>
+    </div>
+
+    <!-- Image Modal -->
+    <div id="imageModal" class="fixed inset-0 z-[60] bg-black bg-opacity-90 hidden flex justify-center items-center p-4 transition-opacity duration-300" onclick="closeImageModal()">
+        <button class="absolute top-4 right-4 text-white text-3xl hover:text-gray-300 focus:outline-none z-[70]">&times;</button>
+        <img id="modalImage" src="" alt="Enlarged Tutorial" class="max-w-full max-h-full rounded shadow-lg object-contain" onclick="event.stopPropagation()">
     </div>
 
     <script>
@@ -956,6 +963,19 @@
                 rows.push(currentRow);
             }
             return rows;
+        }
+
+        // --- Image Modal Functions ---
+        function openImageModal(src) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            modalImg.src = src;
+            modal.classList.remove('hidden');
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('imageModal');
+            modal.classList.add('hidden');
         }
 
         // --- Utilities ---
