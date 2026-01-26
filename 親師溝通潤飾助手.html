@@ -212,8 +212,15 @@
                         <i id="tutorialArrow" class="fa-solid fa-chevron-down transition-transform duration-200"></i>
                     </button>
 
-                    <div id="tutorialImageArea" class="hidden mt-3 border-2 border-emerald-100 rounded-lg overflow-hidden transition-all">
+                    <!-- Tutorial Image with Zoom -->
+                    <div id="tutorialImageArea" class="hidden mt-3 border-2 border-emerald-100 rounded-lg overflow-hidden transition-all relative group cursor-zoom-in" onclick="openImageModal(this.querySelector('img').src)">
                         <img src="https://flysuper-tool.github.io/apps/Gemini_APIkey.png" alt="API Key 申請步驟教學" class="w-full h-auto">
+                        <!-- Hover Overlay -->
+                        <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all flex items-center justify-center">
+                            <span class="bg-black bg-opacity-60 text-white px-3 py-1.5 rounded-full text-xs font-medium opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 shadow-lg flex items-center gap-1">
+                                <i class="fa-solid fa-magnifying-glass-plus"></i> 點擊放大
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -225,6 +232,16 @@
                 <button onclick="toggleApiKeyModal()" class="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg transition">取消</button>
                 <button onclick="saveApiKey()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition font-medium">儲存</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Image Modal (Lightbox) -->
+    <div id="imageModal" class="fixed inset-0 bg-black bg-opacity-90 z-[80] hidden flex items-center justify-center p-4 cursor-zoom-out opacity-0 transition-opacity duration-300" onclick="closeImageModal()">
+        <div class="relative max-w-full max-h-full">
+            <img id="imageModalContent" src="" alt="Enlarged Tutorial" class="max-w-full max-h-[90vh] rounded-lg shadow-2xl object-contain transform scale-95 transition-transform duration-300">
+            <button onclick="closeImageModal()" class="absolute -top-10 right-0 text-white hover:text-gray-300 text-2xl transition focus:outline-none">
+                <i class="fa-solid fa-xmark"></i> 關閉
+            </button>
         </div>
     </div>
 
@@ -277,6 +294,37 @@
                 btnText.innerText = '查看步驟教學圖片';
             }
         }
+
+        // --- Image Modal Logic ---
+        function openImageModal(src) {
+            const modal = document.getElementById('imageModal');
+            const img = document.getElementById('imageModalContent');
+            
+            img.src = src;
+            modal.classList.remove('hidden');
+            
+            // Animation frame to allow transition
+            requestAnimationFrame(() => {
+                modal.classList.remove('opacity-0');
+                img.classList.remove('scale-95');
+                img.classList.add('scale-100');
+            });
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('imageModal');
+            const img = document.getElementById('imageModalContent');
+            
+            modal.classList.add('opacity-0');
+            img.classList.remove('scale-100');
+            img.classList.add('scale-95');
+
+            setTimeout(() => {
+                 modal.classList.add('hidden');
+                 img.src = ''; 
+            }, 300); // Match transition duration
+        }
+
 
         function saveApiKey() {
             const input = document.getElementById('apiKeyInput').value.trim();
