@@ -81,10 +81,21 @@
             <h2 class="text-lg font-bold mb-3 flex items-center gap-2">
                 <i class="fa-solid fa-key"></i> 設定 API Key
             </h2>
-            <p class="text-sm text-slate-500 mb-4">
-                請輸入您的 Google Gemini API Key。金鑰將僅儲存在您瀏覽器的 IndexedDB 中，不會上傳至任何第三方伺服器。<br>
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-600 hover:underline">取得 API Key</a>
-            </p>
+            
+            <div class="text-sm text-slate-500 mb-4 leading-relaxed">
+                <p class="mb-2">
+                    請前往 <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-600 hover:underline font-bold break-all">https://aistudio.google.com/app/apikey</a> 取得 API Key。
+                    <button onclick="toggleTutorial()" class="inline-flex items-center gap-1 text-amber-600 hover:text-amber-700 underline font-medium ml-1">
+                        <i class="fa-regular fa-image"></i> 步驟教學
+                    </button>
+                </p>
+                <p>金鑰將僅儲存在您瀏覽器的 IndexedDB 中，不會上傳至任何第三方伺服器。</p>
+            </div>
+
+            <!-- Tutorial Image (Hidden by default) -->
+            <div id="tutorialBox" class="hidden mb-4 overflow-hidden rounded-lg border border-slate-200 shadow-sm bg-slate-100">
+                <img src="https://flysuper-tool.github.io/apps/Gemini_APIkey.png" alt="API Key 申請步驟教學" class="w-full h-auto">
+            </div>
             
             <!-- Modified Layout for Mobile: Stack vertically on small screens, row on larger -->
             <div class="flex flex-col sm:flex-row gap-3">
@@ -495,6 +506,11 @@
         function toggleSettings() {
             const panel = document.getElementById('settingsPanel');
             panel.classList.toggle('hidden');
+        }
+
+        function toggleTutorial() {
+            const box = document.getElementById('tutorialBox');
+            box.classList.toggle('hidden');
         }
 
         async function saveApiKey() {
