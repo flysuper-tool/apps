@@ -1948,17 +1948,6 @@ async function readTextInsideFrame() {
         // 設置標記，防止重複執行
         isImageRecognizing = true;
         
-        // 在 iOS 上，需要在用戶交互的同步上下文中立即獲取音頻播放權限
-        // 通過播放"圖片辨識中，請稍候。"來獲取權限，同時給用戶提示
-        // 防止重複播放
-        if (!isPlayingWaitingMessage) {
-            isPlayingWaitingMessage = true;
-            sendTextToTTS('圖片辨識中，請稍候。', () => {
-                console.log('播放權限已獲取，開始圖片辨識');
-                isPlayingWaitingMessage = false; // 播放完成後重置標記
-            });
-        }
-        
         try {
             Swal.fire({
                 title: '正在辨識圖片',
@@ -1975,16 +1964,7 @@ async function readTextInsideFrame() {
             Swal.close();
             //console.log('Gemini 原始回傳:', aiDescription);
             if (aiDescription && aiDescription.length > 0) {
-                // 等待"圖片辨識中，請稍候。"播放完成（或至少等待一小段時間確保權限已獲取）
-                // 如果還在播放，停止它
-                const audioPlayer = document.getElementById('audioPlayer');
-                if (audioPlayer && !audioPlayer.paused) {
-                    audioPlayer.pause();
-                    audioPlayer.currentTime = 0;
-                }
-                
                 // 直接使用 Gemini 原始回傳，不進行任何清理
-                // 此時已經獲取了播放權限，可以自動播放
                 sendTextToTTS(aiDescription, () => {
                     console.log('圖片辨識文字朗讀完成');
                     // 辨識完成，重置標記
@@ -3079,26 +3059,6 @@ async function readMarkBlock(markId, pageNum) {
             isImageRecognizing = true;
         }
         
-        // 在 iOS 上，需要在用戶交互的同步上下文中立即獲取音頻播放權限
-        // 通過播放"圖片辨識中，請稍候。"來獲取權限，同時給用戶提示
-        // 防止重複播放
-        if (typeof isPlayingWaitingMessage !== 'undefined' && !isPlayingWaitingMessage) {
-            isPlayingWaitingMessage = true;
-            const ttsFunction = window.sendTextToTTS || sendTextToTTS;
-            if (typeof ttsFunction === 'function') {
-                ttsFunction('圖片辨識中，請稍候。', () => {
-                    console.log('播放權限已獲取，開始圖片辨識');
-                    if (typeof isPlayingWaitingMessage !== 'undefined') {
-                        isPlayingWaitingMessage = false; // 播放完成後重置標記
-                    }
-                });
-            } else {
-                if (typeof isPlayingWaitingMessage !== 'undefined') {
-                    isPlayingWaitingMessage = false;
-                }
-            }
-        }
-        
         try {
             Swal.fire({
                 title: '正在辨識圖片',
@@ -3132,16 +3092,7 @@ async function readMarkBlock(markId, pageNum) {
             const aiDescription = await geminiImageDescribeFunc(base64Image);
             Swal.close();
             if (aiDescription && aiDescription.length > 0) {
-                // 等待"圖片辨識中，請稍候。"播放完成（或至少等待一小段時間確保權限已獲取）
-                // 如果還在播放，停止它
-                const audioPlayer = document.getElementById('audioPlayer');
-                if (audioPlayer && !audioPlayer.paused) {
-                    audioPlayer.pause();
-                    audioPlayer.currentTime = 0;
-                }
-                
                 // 直接使用 Gemini 原始回傳，直接調用 sendTextToTTS 朗讀（與框選朗讀一致）
-                // 此時已經獲取了播放權限，可以自動播放
                 const ttsFunction = window.sendTextToTTS || sendTextToTTS;
                 if (typeof ttsFunction === 'function') {
                     ttsFunction(aiDescription, () => {
