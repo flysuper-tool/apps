@@ -1852,7 +1852,7 @@ async function geminiImageDescribe(base64Image) {
                     {
                         role: "user",
                         parts: [
-                            { text: "你是一個給學習障礙學生報讀考題的報讀員，不要產生 markdown 的 * 符號，請先讀出圖片中的所有文字，遇到科學或數學符號請轉成中文文字的讀法，遇到數學分數時以中文讀法表示，如:幾分之幾，數學式子無須再特別說明它是一個公式，如果這些文字與圖片內容有關，請合併描述。然後用簡單句子描述圖片中的物件，不要贅述，不要描述場景、整體佈局或風格，如果文字部分已能呈現全部，描述完不要再重複陳述圖片元素，如:弟弟吃了八分之五盒雞塊，圖片中，顯示了一行中文字和一個分數，圖片中......以後就是贅述。遇到英文字請如實呈現，不要把X讀成艾克斯。" },
+                            { text: "你是一個給學習障礙學生報讀考題的報讀員，不要產生 markdown 的 * 符號，請先讀出圖片中的所有文字，遇到科學或數學符號請轉成中文文字的讀法，遇到數學分數時以中文讀法表示，如:幾分之幾，數學式子無須再特別說明它是一個公式，如果這些文字與圖片內容有關，請合併描述。然後用簡單句子描述圖片中的物件，不要贅述，不要描述場景、整體佈局或風格，不要使用「圖片中」、「顯示了」、「圖片顯示」等表述，直接描述內容即可。如果文字部分已能呈現全部，描述完不要再重複陳述圖片元素，如:弟弟吃了八分之五盒雞塊，不要再說「圖片中顯示了一行中文字和一個分數」等贅述。遇到英文字請如實呈現，不要把X讀成艾克斯。" },
                             { inline_data: { mime_type: "image/png", data: base64Image } }
                         ]
                     }
@@ -3032,25 +3032,15 @@ async function readMarkBlock(markId, pageNum) {
     // 取得圖片 base64（與框選朗讀一致）
     let base64Image = null;
     let croppedCanvas = null;
-    const pdfCanvas = pdfViewer.querySelector('canvas');
+    const viewerContainer = document.getElementById('viewerContainer');
+    const pdfCanvas = viewerContainer.querySelector('canvas');
     if (pdfCanvas) {
         // 計算標記在畫布中的實際位置（使用 getBoundingClientRect，與框選朗讀一致）
         const markBlockElement = markLayer.querySelector(`[data-mark-id="${markId}"]`);
         if (markBlockElement) {
             const markBlockRect = markBlockElement.getBoundingClientRect();
-            // 確保 cropCanvas 函數可用（檢查全局作用域）
-            const cropCanvasFunc = typeof window !== 'undefined' && window.cropCanvas ? window.cropCanvas : (typeof cropCanvas !== 'undefined' ? cropCanvas : null);
-            if (cropCanvasFunc && typeof cropCanvasFunc === 'function') {
-                croppedCanvas = cropCanvasFunc(pdfCanvas, markBlockRect);
-                if (croppedCanvas) {
-                    const canvasToBase64Func = typeof window !== 'undefined' && window.canvasToBase64 ? window.canvasToBase64 : (typeof canvasToBase64 !== 'undefined' ? canvasToBase64 : null);
-                    if (canvasToBase64Func && typeof canvasToBase64Func === 'function') {
-                        base64Image = canvasToBase64Func(croppedCanvas);
-                    }
-                }
-            } else {
-                console.error('cropCanvas 函數未定義，請確保函數已正確載入');
-            }
+            croppedCanvas = cropCanvas(pdfCanvas, markBlockRect);
+            base64Image = canvasToBase64(croppedCanvas);
         }
     }
     
