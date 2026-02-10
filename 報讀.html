@@ -1314,7 +1314,7 @@ if (clearCacheButton) {
         .then(rep => {
             const jsonStr = rep.match(/google\.visualization\.Query\.setResponse\(([\s\S]+)\);/)[1];
             const data = JSON.parse(jsonStr);
-            console.log("確認欄位對應:", data.table.rows[0]?.c); // 應為 [B欄, C欄]
+            console.log("確認欄位對應（第一行標題，將被跳過）:", data.table.rows[0]?.c); // 第一行是標題，將從第二行開始取值
             return data;
         })
         .catch(err => {
@@ -1325,10 +1325,11 @@ if (clearCacheButton) {
 
 function replaceTextWithSheetData(text, data) {
     if (!data) return text;
+    // 從第二行開始取值（第一行是標題，使用 slice(1) 跳過）
     data.table.rows.slice(1).forEach(row => {
         // 確保資料存在且轉換為字串
-        const original = row.c[0]?.v?.toString() || ''; // B欄
-        const replacement = row.c[1]?.v?.toString() || ''; // C欄
+        const original = row.c[0]?.v?.toString() || ''; // B欄（原始文字）
+        const replacement = row.c[1]?.v?.toString() || ''; // C欄（替換文字）
         if (original && replacement) {
             // 使用字串替換，確保都是純文字處理
             text = text.replace(new RegExp(original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), "g"), replacement);
