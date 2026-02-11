@@ -574,7 +574,16 @@ input[type=range]::-moz-range-thumb {
             <h2 style="margin-top: 0; text-align: center;">報讀系統進階設定</h2>
             
             <!-- 一、API KEY 設定 -->
-            <h3 style="margin-top: 10px; margin-bottom: 10px;">一、API KEY 設定</h3>
+            <div style="display: flex; align-items: flex-end; margin-top: 10px; margin-bottom: 10px;">
+                <h3 style="margin: 0; line-height: 1.2;">一、API KEY 設定</h3>
+                <button
+                    id="apiKeyHelpButton"
+                    type="button"
+                    class="button button-light"
+                    style="margin-left: 8px; padding: 2px 8px; font-size: 14px; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; margin-bottom: 2px;"
+                    title="如何取得 API KEY？"
+                >？</button>
+            </div>
             <div style="margin-bottom: 15px;">
                 <label for="apiKeyInput" style="display: block; margin-bottom: 5px; font-weight: bold;">API KEY：</label>
                 <input type="password" id="apiKeyInput" placeholder="請輸入或掃描 QR Code" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; box-sizing: border-box;">
@@ -615,6 +624,55 @@ input[type=range]::-moz-range-thumb {
         </div>
     </div>
     <div id="apiKeyModalOverlay" class="modal-overlay" style="z-index: 10019;"></div>
+
+    <!-- API KEY 教學彈窗 -->
+    <div id="apiKeyHelpPopup" style="display: none; position: fixed; inset: 0; z-index: 10021; align-items: center; justify-content: center;">
+        <div style="background: #fff; max-width: 480px; width: 90%; padding: 20px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+            <h3 style="margin-top: 0; margin-bottom: 10px; text-align: center;">如何取得 Gemini API KEY</h3>
+            <ol style="padding-left: 20px; margin-top: 0; margin-bottom: 10px; font-size: 14px;">
+                <li>
+                    第一步驟：先連線到
+                    <a href="https://aistudio.google.com/u/2/api-keys" target="_blank" rel="noopener noreferrer">
+                        aistudio.google.com/u/2/api-keys
+                    </a>
+                    並登入你的 Google 帳號。
+                </li>
+                <li>第二步驟：依照下方的教學圖片步驟建立並複製你的 API KEY。</li>
+            </ol>
+            <div style="text-align: center; margin-bottom: 10px;">
+                <img
+                    id="apiKeyHelpImage"
+                    src="https://flysuper-tool.github.io/apps/Gemini_APIkey.png"
+                    alt="Gemini API KEY 取得教學"
+                    style="max-width: 100%; border-radius: 6px; border: 1px solid #ddd; cursor: zoom-in;"
+                >
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">（點擊圖片可放大檢視）</div>
+            </div>
+            <div style="text-align: center;">
+                <button id="apiKeyHelpCloseButton" type="button" class="button button-secondary" style="min-width: 100px;">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- API KEY 教學圖片全螢幕檢視 -->
+    <div id="apiKeyImageFullscreen" style="display: none; position: fixed; inset: 0; z-index: 10022; background-color: rgba(0,0,0,0.8); align-items: center; justify-content: center;">
+        <div style="position: relative; max-width: 95%; max-height: 95%;">
+            <img
+                id="apiKeyHelpImageLarge"
+                src="https://flysuper-tool.github.io/apps/Gemini_APIkey.png"
+                alt="Gemini API KEY 取得教學（放大）"
+                style="max-width: 100%; max-height: 100%; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.5);"
+            >
+            <button
+                id="apiKeyImageFullscreenClose"
+                type="button"
+                class="button button-danger"
+                style="position: absolute; top: -10px; right: -10px; min-width: 60px; font-size: 14px;"
+            >
+                關閉
+            </button>
+        </div>
+    </div>
     
     <!-- 標記功能工具欄（橫向，置底） -->
     <div id="markingToolbar" class="marking-toolbar">
@@ -2764,6 +2822,48 @@ document.getElementById('apiKeySettingsButton').addEventListener('click', async 
     modal.style.display = 'block';
     overlay.style.display = 'block';
 });
+
+// API KEY 教學彈窗開關
+const apiKeyHelpButton = document.getElementById('apiKeyHelpButton');
+const apiKeyHelpPopup = document.getElementById('apiKeyHelpPopup');
+const apiKeyHelpCloseButton = document.getElementById('apiKeyHelpCloseButton');
+const apiKeyHelpImage = document.getElementById('apiKeyHelpImage');
+const apiKeyImageFullscreen = document.getElementById('apiKeyImageFullscreen');
+const apiKeyImageFullscreenClose = document.getElementById('apiKeyImageFullscreenClose');
+
+if (apiKeyHelpButton && apiKeyHelpPopup && apiKeyHelpCloseButton) {
+    apiKeyHelpButton.addEventListener('click', () => {
+        apiKeyHelpPopup.style.display = 'flex';
+    });
+
+    apiKeyHelpCloseButton.addEventListener('click', () => {
+        apiKeyHelpPopup.style.display = 'none';
+    });
+
+    // 點擊背景也可以關閉
+    apiKeyHelpPopup.addEventListener('click', (event) => {
+        if (event.target === apiKeyHelpPopup) {
+            apiKeyHelpPopup.style.display = 'none';
+        }
+    });
+}
+
+// API KEY 教學圖片放大檢視
+if (apiKeyHelpImage && apiKeyImageFullscreen && apiKeyImageFullscreenClose) {
+    apiKeyHelpImage.addEventListener('click', () => {
+        apiKeyImageFullscreen.style.display = 'flex';
+    });
+
+    apiKeyImageFullscreenClose.addEventListener('click', () => {
+        apiKeyImageFullscreen.style.display = 'none';
+    });
+
+    apiKeyImageFullscreen.addEventListener('click', (event) => {
+        if (event.target === apiKeyImageFullscreen) {
+            apiKeyImageFullscreen.style.display = 'none';
+        }
+    });
+}
 
 // 關閉模態視窗
 function closeApiKeyModal() {
