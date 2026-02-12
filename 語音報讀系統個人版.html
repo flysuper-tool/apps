@@ -672,7 +672,7 @@ input[type=range]::-moz-range-thumb {
             <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
                 <button id="markBlockButton" class="button button-success" style="width: 100%; font-size: 16px;">標記區塊</button>
                 <button id="saveMarkedPdfButton" class="button button-success" style="width: 100%; font-size: 16px; display: none;">保存標記</button>
-                <button id="downloadMarkedPdfButton" class="button button-success" style="width: 100%; font-size: 16px; display: none;">下載PDF</button>
+                <button id="downloadMarkedPdfButton" class="button button-success" style="width: 100%; font-size: 16px; display: none;">匯出PDF</button>
                 <button id="clearMarksButton" class="button button-danger" style="width: 100%; font-size: 16px; display: none;">清除標記</button>
             </div>
             
@@ -740,7 +740,7 @@ input[type=range]::-moz-range-thumb {
         <button id="aiMarkButtonToolbar" class="button button-light" style="display: none;">AI標記</button>
         <button id="setPasswordButtonToolbar" class="button button-secondary" style="display: none;">設定密碼</button>
         <button id="saveMarkedPdfButtonToolbar" class="button button-success" style="display: none;">保存標記</button>
-        <button id="downloadMarkedPdfButtonToolbar" class="button button-success" style="display: none;">下載PDF</button>
+        <button id="downloadMarkedPdfButtonToolbar" class="button button-success" style="display: none;">匯出PDF</button>
         <button id="clearMarksButtonToolbar" class="button button-danger" style="display: none;">清除標記</button>
     </div>
 <script>
@@ -6739,17 +6739,17 @@ async function downloadMarkedPdf() {
         
         Swal.fire({
             icon: 'success',
-            title: '下載成功',
-            text: 'PDF已下載到本地（標記數據已保存，重新載入此PDF時會自動恢復標記）',
+            title: '匯出成功',
+            text: 'PDF已匯出到本地（標記數據已保存，重新載入此PDF時會自動恢復標記）',
             timer: 2000,
             showConfirmButton: false
         });
     } catch (error) {
-        console.error('下載PDF失敗:', error);
+        console.error('匯出PDF失敗:', error);
         Swal.fire({
             icon: 'error',
-            title: '下載失敗',
-            text: '無法下載PDF: ' + error.message
+            title: '匯出失敗',
+            text: '無法匯出PDF: ' + error.message
         });
     }
 }
