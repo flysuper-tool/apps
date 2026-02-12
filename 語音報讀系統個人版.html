@@ -123,7 +123,7 @@ audio {
             width: 12px;
             height: 12px;
             border-radius: 50%;
-            z-index: 1001;
+            z-index: 1020; /* 提高 z-index，確保在工具欄和按鈕上方 */
             pointer-events: auto;
             cursor: nwse-resize;
         }
@@ -134,7 +134,7 @@ audio {
         }
         .mark-block .resize-handle.ne {
             top: -6px;
-            right: 20px;
+            right: -6px; /* 改回角落位置，因為 z-index 已提高 */
             cursor: ne-resize;
         }
         .mark-block .resize-handle.sw {
@@ -190,59 +190,118 @@ audio {
         .mark-block.active .mark-label {
             background-color: #28a745;
         }
-        .mark-block .mark-delete {
+        /* 工具欄容器 - 放在標記框內部左上角 */
+        .mark-block .mark-toolbar {
             position: absolute;
-            top: -8px;
-            right: -8px;
-            width: 24px;
-            height: 24px;
+            top: 2px;
+            left: 2px;
+            display: flex;
+            gap: 4px;
+            z-index: 1005;
+            pointer-events: none; /* 容器本身不攔截事件 */
+            opacity: 0; /* 默認隱藏 */
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+        /* 滑鼠懸停時顯示工具欄 */
+        .mark-block:hover .mark-toolbar,
+        .mark-block.active .mark-toolbar {
+            opacity: 1;
+            visibility: visible;
+        }
+        .mark-block .mark-toolbar > * {
+            pointer-events: auto; /* 但按鈕可以接收事件 */
+        }
+        /* 如果標記框太小，工具欄顯示在外部 */
+        .mark-block .mark-toolbar.small-box {
+            top: -28px; /* 顯示在標記框上方 */
+            left: 0;
+            background-color: rgba(255, 255, 255, 0.95);
+            padding: 2px 4px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            border: 1px solid #ddd;
+        }
+        .mark-block .mark-delete {
+            width: 22px;
+            height: 22px;
             background-color: #dc3545;
             color: white;
-            border: 2px solid white;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            font-weight: bold;
-            z-index: 1005;
-            line-height: 1;
-            pointer-events: auto;
-            user-select: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-        }
-        .mark-block .mark-delete:hover {
-            background-color: #c82333;
-        }
-        .mark-block .mark-edit {
-            position: absolute;
-            top: -8px;
-            right: 28px;
-            width: 24px;
-            height: 24px;
-            background-color: #28a745;
-            color: white;
-            border: 2px solid white;
-            border-radius: 50%;
+            border: 1px solid white;
+            border-radius: 4px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 14px;
             font-weight: bold;
-            z-index: 1005;
             line-height: 1;
-            pointer-events: auto;
             user-select: none;
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .mark-block .mark-delete:hover {
+            background-color: #c82333;
+            transform: scale(1.1);
+        }
+        .mark-block .mark-edit {
+            width: 22px;
+            height: 22px;
+            background-color: #28a745;
+            color: white;
+            border: 1px solid white;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            line-height: 1;
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
         .mark-block .mark-edit:hover {
             background-color: #218838;
+            transform: scale(1.1);
+        }
+        .mark-block .mark-lock {
+            width: 22px;
+            height: 22px;
+            background-color: #ffc107;
+            color: white;
+            border: 1px solid white;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            user-select: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .mark-block .mark-lock:hover {
+            background-color: #e0a800;
+            transform: scale(1.1);
+        }
+        .mark-block .mark-lock.locked {
+            background-color: #dc3545;
+        }
+        .mark-block .mark-lock.locked:hover {
+            background-color: #c82333;
+        }
+        .mark-block.locked {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        .mark-block.locked .mark-lock {
+            pointer-events: auto;
         }
         .mark-layer.hidden {
             display: none !important;
@@ -4747,13 +4806,98 @@ function finishMark(e) {
             saveMarksToPdf(false);
         });
         
+        // 確保 locked 屬性存在
+        if (!marks[markPageNum]) {
+            marks[markPageNum] = [];
+        }
+        const markData = marks[markPageNum].find(m => m.id === markId);
+        if (markData && markData.locked === undefined) {
+            markData.locked = false;
+        }
+        
+        // 創建工具欄容器
+        const toolbar = document.createElement('div');
+        toolbar.className = 'mark-toolbar';
+        
+        // 如果標記框寬度不足（小於 80px），工具欄顯示在外部
+        const markWidth = parseFloat(currentMark.element.style.width) || currentMark.width;
+        if (markWidth < 80) {
+            toolbar.classList.add('small-box');
+        }
+        
+        // 添加鎖頭按鈕
+        const lockBtn = document.createElement('div');
+        lockBtn.className = 'mark-lock';
+        const isLocked = markData ? markData.locked : false;
+        lockBtn.textContent = isLocked ? '🔒' : '🔓';
+        lockBtn.title = isLocked ? '解鎖標記（解鎖後可移動、調整和刪除）' : '鎖定標記（鎖定後不可移動、調整和刪除）';
+        if (isLocked) {
+            lockBtn.classList.add('locked');
+            currentMark.element.classList.add('locked');
+        }
+        
+        // 使用標記防止重複觸發
+        let isLockHandling = false;
+        
+        const handleLock = async (e) => {
+            // 防止重複觸發
+            if (isLockHandling) {
+                return false;
+            }
+            
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            isLockHandling = true;
+            
+            // 確保 markData 對象存在
+            if (!markData) {
+                console.error('找不到標記數據:', markId);
+                isLockHandling = false;
+                return false;
+            }
+            
+            // 切換鎖定狀態
+            markData.locked = !markData.locked;
+            
+            console.log('切換鎖定狀態，標記ID:', markId, '新狀態:', markData.locked);
+            
+            // 立即更新標記框狀態
+            if (markData.locked) {
+                currentMark.element.classList.add('locked');
+                lockBtn.textContent = '🔒';
+                lockBtn.classList.add('locked');
+                lockBtn.title = '解鎖標記（解鎖後可移動、調整和刪除）';
+            } else {
+                currentMark.element.classList.remove('locked');
+                lockBtn.textContent = '🔓';
+                lockBtn.classList.remove('locked');
+                lockBtn.title = '鎖定標記（鎖定後不可移動、調整和刪除）';
+            }
+            
+            // 保存到 PDF（異步執行，不阻塞 UI 更新）
+            saveMarksToPdf(false).catch(err => {
+                console.error('保存鎖定狀態失敗:', err);
+            }).finally(() => {
+                // 延遲重置標記，確保所有事件都處理完
+                setTimeout(() => {
+                    isLockHandling = false;
+                }, 100);
+            });
+            
+            return false;
+        };
+        
+        // 只使用 click 事件，避免 mousedown 和 click 重複觸發
+        lockBtn.addEventListener('click', handleLock);
+        toolbar.appendChild(lockBtn);
+        
         // 添加編輯按鈕
         const editBtn = document.createElement('div');
         editBtn.className = 'mark-edit';
         editBtn.textContent = '✎';
         editBtn.title = '編輯替換文字';
-        editBtn.style.pointerEvents = 'auto';
-        editBtn.style.zIndex = '1005';
         
         const handleEdit = (e) => {
             e.preventDefault();
@@ -4763,34 +4907,44 @@ function finishMark(e) {
             return false;
         };
         
-        editBtn.addEventListener('mousedown', handleEdit);
-        editBtn.addEventListener('touchstart', handleEdit);
         editBtn.addEventListener('click', handleEdit);
-        currentMark.element.appendChild(editBtn);
+        toolbar.appendChild(editBtn);
         
         // 添加刪除按鈕
         const deleteBtn = document.createElement('div');
         deleteBtn.className = 'mark-delete';
         deleteBtn.textContent = '×';
         deleteBtn.title = '刪除此標記';
-        deleteBtn.style.pointerEvents = 'auto';
-        deleteBtn.style.zIndex = '1005';
         
-        // 使用多種事件確保能觸發，使用保存的變量而不是 currentMark
+        // 使用 click 事件
         const handleDelete = async (e) => {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
+            // 如果標記已鎖定，不允許刪除
+            if (markData && markData.locked) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '無法刪除',
+                    text: '標記已鎖定，請先解鎖後再刪除',
+                    timer: 2000,
+                    showConfirmButton: false,
+                    customClass: {
+                        popup: 'swal-high-z-index'
+                    }
+                });
+                return false;
+            }
             console.log('刪除按鈕被點擊，標記ID:', markId);
             await deleteMarkBlock(markId, markPageNum);
             return false;
         };
         
-        deleteBtn.addEventListener('mousedown', handleDelete);
-        deleteBtn.addEventListener('touchstart', handleDelete);
         deleteBtn.addEventListener('click', handleDelete);
+        toolbar.appendChild(deleteBtn);
         
-        currentMark.element.appendChild(deleteBtn);
+        // 將工具欄添加到標記框
+        currentMark.element.appendChild(toolbar);
         
         // 在編輯模式下添加調整大小的控制點和拖拽功能（與renderMarks相同）
         if (isMarkingMode) {
@@ -4854,6 +5008,13 @@ function finishMark(e) {
             
             // 處理調整大小
             const handleResizeStart = (e, direction) => {
+                // 如果標記已鎖定，不允許調整大小
+                if (currentMark && marks[currentMark.pageNum]) {
+                    const currentMarkData = marks[currentMark.pageNum].find(m => m.id === markId);
+                    if (currentMarkData && currentMarkData.locked) {
+                        return;
+                    }
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 markState.isResizing = true;
@@ -4875,12 +5036,21 @@ function finishMark(e) {
             
             // 處理拖拽開始
             const handleDragStart = (e) => {
-                // 如果點擊的是控制點、刪除按鈕或編輯按鈕，不開始拖拽
+                // 如果標記已鎖定，不允許拖拽
+                if (currentMark && marks[currentMark.pageNum]) {
+                    const currentMarkData = marks[currentMark.pageNum].find(m => m.id === markId);
+                    if (currentMarkData && currentMarkData.locked) {
+                        return;
+                    }
+                }
+                // 如果點擊的是控制點、刪除按鈕、編輯按鈕或鎖頭按鈕，不開始拖拽
                 if (e.target.classList.contains('resize-handle') ||
                     e.target.classList.contains('mark-delete') ||
                     e.target.classList.contains('mark-edit') ||
+                    e.target.classList.contains('mark-lock') ||
                     e.target.closest('.mark-delete') ||
-                    e.target.closest('.mark-edit')) {
+                    e.target.closest('.mark-edit') ||
+                    e.target.closest('.mark-lock')) {
                     return;
                 }
                 e.preventDefault();
@@ -5792,12 +5962,15 @@ async function loadMarksFromPdf() {
                 const marksJson = decodeURIComponent(escape(atob(encodedMarks)));
                 marks = JSON.parse(marksJson);
                 
-                // 確保每個標記都有 replacementText 字段（向後兼容）
+                // 確保每個標記都有 replacementText 和 locked 字段（向後兼容）
                 Object.keys(marks).forEach(pageNum => {
                     if (Array.isArray(marks[pageNum])) {
                         marks[pageNum].forEach(mark => {
                             if (!mark.hasOwnProperty('replacementText')) {
                                 mark.replacementText = '';
+                            }
+                            if (!mark.hasOwnProperty('locked')) {
+                                mark.locked = false;
                             }
                         });
                     }
@@ -5890,13 +6063,98 @@ function renderMarks() {
         label.textContent = `區塊 ${mark.id + 1}`;
         markBlock.appendChild(label);
         
+        // 確保 locked 屬性存在（向後兼容）
+        if (mark.locked === undefined) {
+            mark.locked = false;
+        }
+        
+        // 如果鎖定，添加 locked class
+        if (mark.locked) {
+            markBlock.classList.add('locked');
+        }
+        
+        // 創建工具欄容器
+        const toolbar = document.createElement('div');
+        toolbar.className = 'mark-toolbar';
+        
+        // 如果標記框寬度不足（小於 80px），工具欄顯示在外部
+        if (mark.width < 80) {
+            toolbar.classList.add('small-box');
+        }
+        
+        // 添加鎖頭按鈕
+        const lockBtn = document.createElement('div');
+        lockBtn.className = 'mark-lock';
+        lockBtn.textContent = mark.locked ? '🔒' : '🔓';
+        lockBtn.title = mark.locked ? '解鎖標記（解鎖後可移動、調整和刪除）' : '鎖定標記（鎖定後不可移動、調整和刪除）';
+        if (mark.locked) {
+            lockBtn.classList.add('locked');
+        }
+        
+        // 使用標記防止重複觸發
+        let isLockHandling = false;
+        
+        const handleLock = async (e) => {
+            // 防止重複觸發
+            if (isLockHandling) {
+                return false;
+            }
+            
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            
+            isLockHandling = true;
+            
+            // 確保 mark 對象存在
+            const currentMarkData = marks[currentPage].find(m => m.id === mark.id);
+            if (!currentMarkData) {
+                console.error('找不到標記數據:', mark.id);
+                isLockHandling = false;
+                return false;
+            }
+            
+            // 切換鎖定狀態
+            currentMarkData.locked = !currentMarkData.locked;
+            mark.locked = currentMarkData.locked; // 同步更新閉包中的 mark
+            
+            console.log('切換鎖定狀態，標記ID:', mark.id, '新狀態:', currentMarkData.locked);
+            
+            // 立即更新標記框狀態
+            if (currentMarkData.locked) {
+                markBlock.classList.add('locked');
+                lockBtn.textContent = '🔒';
+                lockBtn.classList.add('locked');
+                lockBtn.title = '解鎖標記（解鎖後可移動、調整和刪除）';
+            } else {
+                markBlock.classList.remove('locked');
+                lockBtn.textContent = '🔓';
+                lockBtn.classList.remove('locked');
+                lockBtn.title = '鎖定標記（鎖定後不可移動、調整和刪除）';
+            }
+            
+            // 保存到 PDF（異步執行，不阻塞 UI 更新）
+            saveMarksToPdf(false).catch(err => {
+                console.error('保存鎖定狀態失敗:', err);
+            }).finally(() => {
+                // 延遲重置標記，確保所有事件都處理完
+                setTimeout(() => {
+                    isLockHandling = false;
+                }, 100);
+            });
+            
+            return false;
+        };
+        
+        // 只使用 click 事件，避免 mousedown 和 click 重複觸發
+        lockBtn.addEventListener('click', handleLock);
+        toolbar.appendChild(lockBtn);
+        
         // 添加編輯按鈕
         const editBtn = document.createElement('div');
         editBtn.className = 'mark-edit';
         editBtn.textContent = '✎';
         editBtn.title = '編輯替換文字';
-        editBtn.style.pointerEvents = 'auto';
-        editBtn.style.zIndex = '1005';
         
         const handleEdit = (e) => {
             e.preventDefault();
@@ -5906,48 +6164,43 @@ function renderMarks() {
             return false;
         };
         
-        editBtn.addEventListener('mousedown', handleEdit);
-        editBtn.addEventListener('touchstart', handleEdit);
         editBtn.addEventListener('click', handleEdit);
-        markBlock.appendChild(editBtn);
+        toolbar.appendChild(editBtn);
         
         // 添加刪除按鈕
         const deleteBtn = document.createElement('div');
         deleteBtn.className = 'mark-delete';
         deleteBtn.textContent = '×';
         deleteBtn.title = '刪除此標記';
-        deleteBtn.style.pointerEvents = 'auto';
-        deleteBtn.style.zIndex = '1005';
         
-        // 使用 mousedown 事件確保能觸發
-        deleteBtn.addEventListener('mousedown', async (e) => {
+        // 使用 click 事件
+        deleteBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
+            // 如果標記已鎖定，不允許刪除
+            if (mark.locked) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '無法刪除',
+                    text: '標記已鎖定，請先解鎖後再刪除',
+                    timer: 2000,
+                    showConfirmButton: false,
+                    customClass: {
+                        popup: 'swal-high-z-index'
+                    }
+                });
+                return false;
+            }
             console.log('刪除按鈕被點擊，標記ID:', mark.id);
             await deleteMarkBlock(mark.id, currentPage);
             return false;
         });
         
-        deleteBtn.addEventListener('touchstart', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            console.log('刪除按鈕被觸摸，標記ID:', mark.id);
-            await deleteMarkBlock(mark.id, currentPage);
-            return false;
-        });
+        toolbar.appendChild(deleteBtn);
         
-        deleteBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            console.log('刪除按鈕被點擊（click事件），標記ID:', mark.id);
-            await deleteMarkBlock(mark.id, currentPage);
-            return false;
-        });
-        
-        markBlock.appendChild(deleteBtn);
+        // 將工具欄添加到標記框
+        markBlock.appendChild(toolbar);
         
         // 在編輯模式下添加調整大小的控制點和拖拽功能
         if (isMarkingMode) {
@@ -6010,6 +6263,10 @@ function renderMarks() {
             
             // 處理調整大小
             const handleResizeStart = (e, direction) => {
+                // 如果標記已鎖定，不允許調整大小
+                if (mark.locked) {
+                    return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 markState.isResizing = true;
@@ -6031,12 +6288,18 @@ function renderMarks() {
             
             // 處理拖拽開始
             const handleDragStart = (e) => {
-                // 如果點擊的是控制點、刪除按鈕或編輯按鈕，不開始拖拽
+                // 如果標記已鎖定，不允許拖拽
+                if (mark.locked) {
+                    return;
+                }
+                // 如果點擊的是控制點、刪除按鈕、編輯按鈕或鎖頭按鈕，不開始拖拽
                 if (e.target.classList.contains('resize-handle') ||
                     e.target.classList.contains('mark-delete') ||
                     e.target.classList.contains('mark-edit') ||
+                    e.target.classList.contains('mark-lock') ||
                     e.target.closest('.mark-delete') ||
-                    e.target.closest('.mark-edit')) {
+                    e.target.closest('.mark-edit') ||
+                    e.target.closest('.mark-lock')) {
                     return;
                 }
                 e.preventDefault();
@@ -6214,11 +6477,13 @@ function renderMarks() {
         // 無論標記是否可見，都要保留點擊朗讀功能
         // 但不在標記模式下觸發，避免錯誤
         markBlock.addEventListener('click', (e) => {
-            // 如果點擊的是刪除按鈕、編輯按鈕、調整大小控制點或其子元素，不觸發朗讀
+            // 如果點擊的是刪除按鈕、編輯按鈕、鎖頭按鈕、調整大小控制點或其子元素，不觸發朗讀
             if (e.target.classList.contains('mark-delete') || 
                 e.target.closest('.mark-delete') ||
                 e.target.classList.contains('mark-edit') || 
                 e.target.closest('.mark-edit') ||
+                e.target.classList.contains('mark-lock') ||
+                e.target.closest('.mark-lock') ||
                 e.target.classList.contains('resize-handle')) {
                 e.stopPropagation();
                 return;
