@@ -272,6 +272,10 @@
             updateApiKeyStatus();
             renderHistory();
             initSpeechRecognition();
+            // 若尚未設定 API Key，自動顯示輸入框（與輔導紀錄 AI 助手相同）
+            if (!GEMINI_API_KEY || !GEMINI_API_KEY.trim()) {
+                toggleApiKeyModal();
+            }
         });
 
         // --- API Key Management ---
