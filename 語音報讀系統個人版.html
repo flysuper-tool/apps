@@ -890,6 +890,8 @@ function renderPage(pageNum) {
             
             // 在文字層渲染完成後，延遲渲染標記
             setTimeout(() => {
+                // 文字層會被 wrapTextInFraTags 轉成 <my-fra>，先替同頁的 my-fra 編號
+                assignFraIndicesForPage(pageNum);
                 renderMarks();
                 // 如果處於標記模式，確保標記層事件已啟用並設置游標
                 if (isMarkingMode) {
@@ -921,6 +923,23 @@ function renderPage(pageNum) {
             window.history.replaceState({}, '', newUrl);
         }
     });
+}
+
+// 依「同頁 textLayer」內的 <my-fra> DOM 順序編號，供標記鎖定文字用
+function assignFraIndicesForPage(pageNum) {
+    try {
+        const markLayer = document.querySelector(`.mark-layer[data-page-num="${pageNum}"]`);
+        if (!markLayer) return;
+        const pdfViewer = markLayer.parentElement;
+        const textLayer = pdfViewer ? pdfViewer.querySelector('.textLayer') : null;
+        if (!textLayer) return;
+        const fras = textLayer.getElementsByTagName('my-fra');
+        for (let i = 0; i < fras.length; i++) {
+            fras[i].dataset.spanIdx = String(i);
+        }
+    } catch (err) {
+        console.warn('assignFraIndicesForPage 失敗:', err);
+    }
 }
 
 // Event listener for orientation changes
@@ -4042,26 +4061,54 @@ ${fullText.trim()}
                             const markY = y + (textLayerRect.top - markLayerRect.top);
                             
                             if (width > 10 && height > 10) {
-                                // 檢查是否與現有標記重疊（補充模式）
-                                if (isSupplementMode && marks[pageNum]) {
+                                // 避免產生覆蓋整頁的超大標記（更嚴格限制）
+                                const pageW = markLayerRect.width;
+                                const pageH = markLayerRect.height;
+                                const pageArea = pageW * pageH;
+                                const markArea = width * height;
+
+                                const tooWideOrTall =
+                                    width > pageW * 0.85 ||   // 不要太寬
+                                    height > pageH * 0.4;     // 不要太高
+
+                                const tooBigArea = markArea > pageArea * 0.3; // 面積不能佔整頁太多
+
+                                if (tooWideOrTall || tooBigArea) {
+                                    console.log(`第 ${pageNum} 頁 跳過過大標記(模糊匹配)：`, targetText.substring(0, 20));
+                                    continue;
+                                }
+
+                                // 檢查是否與現有標記重疊（所有 AI 模式都避免重疊）
+                                if (marks[pageNum]) {
                                     let overlaps = false;
                                     for (const existingMark of marks[pageNum]) {
-                                        // 計算重疊區域
+                                        // 先看是否覆蓋到相同文字範圍（以 span 索引區間判斷）
+                                        if (Number.isFinite(existingMark.aiSpanStart) && Number.isFinite(existingMark.aiSpanEnd)) {
+                                            const aStart = startSpanIndex;
+                                            const aEnd = endSpanIndex;
+                                            const bStart = existingMark.aiSpanStart;
+                                            const bEnd = existingMark.aiSpanEnd;
+                                            const indexOverlap = !(aEnd < bStart || aStart > bEnd);
+                                            if (indexOverlap) {
+                                                overlaps = true;
+                                                break;
+                                            }
+                                        }
+
+                                        // 再用幾何判斷是否有任何重疊
                                         const overlapX = Math.max(0, Math.min(markX + width, existingMark.x + existingMark.width) - Math.max(markX, existingMark.x));
                                         const overlapY = Math.max(0, Math.min(markY + height, existingMark.y + existingMark.height) - Math.max(markY, existingMark.y));
                                         const overlapArea = overlapX * overlapY;
-                                        const newMarkArea = width * height;
-                                        const existingMarkArea = existingMark.width * existingMark.height;
                                         
-                                        // 如果重疊面積超過新標記或現有標記的30%，認為是重疊
-                                        if (overlapArea > newMarkArea * 0.3 || overlapArea > existingMarkArea * 0.3) {
+                                        // AI 標記：只要有任何重疊就視為重疊，完全避免疊框
+                                        if (overlapArea > 0) {
                                             overlaps = true;
                                             break;
                                         }
                                     }
                                     
                                     if (overlaps) {
-                                        console.log(`第 ${pageNum} 頁 跳過與現有標記重疊的標記:`, targetText.substring(0, 20));
+                                        console.log(`第 ${pageNum} 頁 跳過與現有標記重疊的標記(模糊匹配):`, targetText.substring(0, 20));
                                         continue; // 跳過重疊的標記
                                     }
                                 }
@@ -4082,7 +4129,10 @@ ${fullText.trim()}
                                     wPct: markLayerRect.width ? (width / markLayerRect.width) : null,
                                     hPct: markLayerRect.height ? (height / markLayerRect.height) : null,
                                     text: targetText,
-                                    replacementText: ''
+                                    replacementText: '',
+                                    // 記錄此 AI 標記覆蓋到的 spanData 索引範圍，避免之後重複標記同一段文字
+                                    aiSpanStart: startSpanIndex,
+                                    aiSpanEnd: endSpanIndex
                                 };
                                 
                                 marks[pageNum].push(mark);
@@ -4133,26 +4183,54 @@ ${fullText.trim()}
                             const markY = y + (textLayerRect.top - markLayerRect.top);
                             
                             if (width > 10 && height > 10) {
-                                // 檢查是否與現有標記重疊（補充模式）
-                                if (isSupplementMode && marks[pageNum]) {
+                                // 避免產生覆蓋整頁的超大標記（更嚴格限制）
+                                const pageW = markLayerRect.width;
+                                const pageH = markLayerRect.height;
+                                const pageArea = pageW * pageH;
+                                const markArea = width * height;
+
+                                const tooWideOrTall =
+                                    width > pageW * 0.85 ||   // 不要太寬
+                                    height > pageH * 0.4;     // 不要太高
+
+                                const tooBigArea = markArea > pageArea * 0.3; // 面積不能佔整頁太多
+
+                                if (tooWideOrTall || tooBigArea) {
+                                    console.log(`第 ${pageNum} 頁 跳過過大標記(精確匹配)：`, targetText.substring(0, 20));
+                                    continue;
+                                }
+
+                                // 檢查是否與現有標記重疊（所有 AI 模式都避免重疊）
+                                if (marks[pageNum]) {
                                     let overlaps = false;
                                     for (const existingMark of marks[pageNum]) {
-                                        // 計算重疊區域
+                                        // 先看是否覆蓋到相同文字範圍（以 span 索引區間判斷）
+                                        if (Number.isFinite(existingMark.aiSpanStart) && Number.isFinite(existingMark.aiSpanEnd)) {
+                                            const aStart = startSpanIndex;
+                                            const aEnd = endSpanIndex;
+                                            const bStart = existingMark.aiSpanStart;
+                                            const bEnd = existingMark.aiSpanEnd;
+                                            const indexOverlap = !(aEnd < bStart || aStart > bEnd);
+                                            if (indexOverlap) {
+                                                overlaps = true;
+                                                break;
+                                            }
+                                        }
+
+                                        // 再用幾何判斷是否有任何重疊
                                         const overlapX = Math.max(0, Math.min(markX + width, existingMark.x + existingMark.width) - Math.max(markX, existingMark.x));
                                         const overlapY = Math.max(0, Math.min(markY + height, existingMark.y + existingMark.height) - Math.max(markY, existingMark.y));
                                         const overlapArea = overlapX * overlapY;
-                                        const newMarkArea = width * height;
-                                        const existingMarkArea = existingMark.width * existingMark.height;
                                         
-                                        // 如果重疊面積超過新標記或現有標記的30%，認為是重疊
-                                        if (overlapArea > newMarkArea * 0.3 || overlapArea > existingMarkArea * 0.3) {
+                                        // AI 標記：只要有任何重疊就視為重疊，完全避免疊框
+                                        if (overlapArea > 0) {
                                             overlaps = true;
                                             break;
                                         }
                                     }
                                     
                                     if (overlaps) {
-                                        console.log(`第 ${pageNum} 頁 跳過與現有標記重疊的標記:`, targetText.substring(0, 20));
+                                        console.log(`第 ${pageNum} 頁 跳過與現有標記重疊的標記(精確匹配):`, targetText.substring(0, 20));
                                         continue; // 跳過重疊的標記
                                     }
                                 }
@@ -4173,7 +4251,10 @@ ${fullText.trim()}
                                     wPct: markLayerRect.width ? (width / markLayerRect.width) : null,
                                     hPct: markLayerRect.height ? (height / markLayerRect.height) : null,
                                     text: targetText,
-                                    replacementText: ''
+                                    replacementText: '',
+                                    // 記錄此 AI 標記覆蓋到的 spanData 索引範圍，避免之後重複標記同一段文字
+                                    aiSpanStart: startSpanIndex,
+                                    aiSpanEnd: endSpanIndex
                                 };
                                 
                                 marks[pageNum].push(mark);
@@ -5047,11 +5128,17 @@ function finishMark(e) {
         let finalW = currentMark.width;
         let finalH = currentMark.height;
 
+        // 文字鎖定：記錄重疊到的 my-fra idx 範圍（縮放後用 idx 重新算 bbox，避免範圍飄移）
+        let spanIdxStart = null;
+        let spanIdxEnd = null;
+
         // 嘗試「吸附到文字層」：以文字 span 為基準重新計算 bounding box
         if (markLayer && layerW > 0 && layerH > 0) {
             const pdfViewer = markLayer.parentElement;
             const textLayer = pdfViewer ? pdfViewer.querySelector('.textLayer') : null;
             if (textLayer) {
+                // 確保本頁 my-fra 已有編號
+                assignFraIndicesForPage(currentMark.pageNum);
                 const textLayerRect = textLayer.getBoundingClientRect();
                 const markLayerRect = layerRect;
 
@@ -5073,16 +5160,24 @@ function finishMark(e) {
                     const spanRight = spanRect.right - textLayerRect.left;
                     const spanBottom = spanRect.bottom - textLayerRect.top;
 
-                    const isOverlapping = !(spanRight < roughInTextLayer.left ||
-                                            spanX > roughInTextLayer.right ||
-                                            spanBottom < roughInTextLayer.top ||
-                                            spanY > roughInTextLayer.bottom);
+                    // 僅納入「有相當比例落在粗略框內」的文字，避免跨題被一起包進來
+                    const overlapX = Math.max(0, Math.min(spanRight, roughInTextLayer.right) - Math.max(spanX, roughInTextLayer.left));
+                    const overlapY = Math.max(0, Math.min(spanBottom, roughInTextLayer.bottom) - Math.max(spanY, roughInTextLayer.top));
+                    const overlapArea = overlapX * overlapY;
+                    const spanArea = (spanRight - spanX) * (spanBottom - spanY);
+                    const isOverlappingEnough = spanArea > 0 && overlapArea / spanArea >= 0.5; // 至少一半面積在框內
 
-                    if (isOverlapping) {
+                    if (isOverlappingEnough) {
                         minX = Math.min(minX, spanX);
                         minY = Math.min(minY, spanY);
                         maxX = Math.max(maxX, spanRight);
                         maxY = Math.max(maxY, spanBottom);
+
+                        const idx = span.dataset && span.dataset.spanIdx !== undefined ? Number(span.dataset.spanIdx) : null;
+                        if (Number.isFinite(idx)) {
+                            spanIdxStart = spanIdxStart === null ? idx : Math.min(spanIdxStart, idx);
+                            spanIdxEnd = spanIdxEnd === null ? idx : Math.max(spanIdxEnd, idx);
+                        }
                     }
                 }
 
@@ -5102,6 +5197,37 @@ function finishMark(e) {
             }
         }
 
+        // 手動標記也避免與既有標記大面積重疊
+        if (marks[currentMark.pageNum] && marks[currentMark.pageNum].length > 0) {
+            const newArea = finalW * finalH;
+            let overlaps = false;
+            for (const existingMark of marks[currentMark.pageNum]) {
+                const overlapX = Math.max(0, Math.min(finalX + finalW, existingMark.x + existingMark.width) - Math.max(finalX, existingMark.x));
+                const overlapY = Math.max(0, Math.min(finalY + finalH, existingMark.y + existingMark.height) - Math.max(finalY, existingMark.y));
+                const overlapArea = overlapX * overlapY;
+                const existingArea = existingMark.width * existingMark.height;
+                if (overlapArea > newArea * 0.3 || overlapArea > existingArea * 0.3) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (overlaps) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: '標記重疊',
+                    text: '此區塊與現有標記重疊太多，已自動略過建立，請調整範圍或選擇其他位置。',
+                    timer: 1800,
+                    showConfirmButton: false
+                });
+                // 移除暫時畫出的框
+                if (currentMark.element) {
+                    currentMark.element.remove();
+                }
+                currentMark = null;
+                return;
+            }
+        }
+
         // 保存標記（使用吸附後的框）
         if (!marks[currentMark.pageNum]) {
             marks[currentMark.pageNum] = [];
@@ -5112,6 +5238,9 @@ function finishMark(e) {
             y: finalY,
             width: finalW,
             height: finalH,
+            // 鎖定原始文字內容用（以 my-fra 的順序 idx）
+            spanIdxStart,
+            spanIdxEnd,
             // 以比例保存（跨裝置/螢幕縮放不跑位）
             xPct: layerW > 0 ? (finalX / layerW) : null,
             yPct: layerH > 0 ? (finalY / layerH) : null,
@@ -6478,6 +6607,9 @@ function renderMarks() {
         console.warn('標記層不存在，頁碼:', currentPage);
         return;
     }
+
+    // 每次渲染前，重新替本頁 <my-fra> 編號（縮放/重繪後 textLayer 會重建）
+    assignFraIndicesForPage(currentPage);
     
     // 檢查是否有標記正在被拖拽或調整大小
     // 如果有，則跳過重新渲染，避免中斷用戶操作
@@ -6493,6 +6625,9 @@ function renderMarks() {
     const layerRect = markLayer.getBoundingClientRect();
     const layerW = layerRect && layerRect.width ? layerRect.width : 0;
     const layerH = layerRect && layerRect.height ? layerRect.height : 0;
+    const pdfViewer = markLayer.parentElement;
+    const textLayer = pdfViewer ? pdfViewer.querySelector('.textLayer') : null;
+    const textLayerRect = textLayer ? textLayer.getBoundingClientRect() : null;
     
     marks[currentPage].forEach(mark => {
         // 驗證標記數據
@@ -6502,8 +6637,87 @@ function renderMarks() {
             return;
         }
 
-        // 若有比例座標，依目前標記層尺寸換算回 px（跨螢幕大小不跑位）
-        if (layerW > 0 && layerH > 0) {
+        // 如果還沒有文字 idx，但已有框，先用目前框去補齊 spanIdxStart/spanIdxEnd（載入舊標記時會用到）
+        if (textLayer && textLayerRect && layerW > 0 && layerH > 0 &&
+            (mark.spanIdxStart === undefined || mark.spanIdxStart === null ||
+             mark.spanIdxEnd === undefined || mark.spanIdxEnd === null)) {
+            const roughInTextLayer = {
+                left: mark.x + (layerRect.left - textLayerRect.left),
+                top: mark.y + (layerRect.top - textLayerRect.top),
+                right: mark.x + mark.width + (layerRect.left - textLayerRect.left),
+                bottom: mark.y + mark.height + (layerRect.top - textLayerRect.top)
+            };
+            const frasAll = textLayer.getElementsByTagName('my-fra');
+            let minIdx = null;
+            let maxIdx = null;
+            for (let i = 0; i < frasAll.length; i++) {
+                const fra = frasAll[i];
+                const r = fra.getBoundingClientRect();
+                const spanX = r.left - textLayerRect.left;
+                const spanY = r.top - textLayerRect.top;
+                const spanRight = r.right - textLayerRect.left;
+                const spanBottom = r.bottom - textLayerRect.top;
+
+                const isOverlapping = !(spanRight < roughInTextLayer.left ||
+                                        spanX > roughInTextLayer.right ||
+                                        spanBottom < roughInTextLayer.top ||
+                                        spanY > roughInTextLayer.bottom);
+                if (isOverlapping) {
+                    minIdx = minIdx === null ? i : Math.min(minIdx, i);
+                    maxIdx = maxIdx === null ? i : Math.max(maxIdx, i);
+                }
+            }
+            if (minIdx !== null && maxIdx !== null) {
+                mark.spanIdxStart = minIdx;
+                mark.spanIdxEnd = maxIdx;
+            }
+        }
+
+        // 優先用「文字 idx 鎖定」重算 bbox（縮放後仍鎖定同一段文字內容）
+        if (textLayer && textLayerRect && layerW > 0 && layerH > 0 &&
+            Number.isFinite(mark.spanIdxStart) && Number.isFinite(mark.spanIdxEnd) &&
+            mark.spanIdxStart !== null && mark.spanIdxEnd !== null &&
+            mark.spanIdxEnd >= mark.spanIdxStart) {
+            const fras = textLayer.getElementsByTagName('my-fra');
+            const start = Math.max(0, Math.min(fras.length - 1, mark.spanIdxStart));
+            const end = Math.max(0, Math.min(fras.length - 1, mark.spanIdxEnd));
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (let i = start; i <= end; i++) {
+                const fra = fras[i];
+                if (!fra) continue;
+                const r = fra.getBoundingClientRect();
+                const x1 = r.left - textLayerRect.left;
+                const y1 = r.top - textLayerRect.top;
+                const x2 = r.right - textLayerRect.left;
+                const y2 = r.bottom - textLayerRect.top;
+                minX = Math.min(minX, x1);
+                minY = Math.min(minY, y1);
+                maxX = Math.max(maxX, x2);
+                maxY = Math.max(maxY, y2);
+            }
+
+            if (minX !== Infinity && minY !== Infinity && maxX !== -Infinity && maxY !== -Infinity) {
+                // 文字層座標 -> mark-layer 座標
+                const nextX = minX + (textLayerRect.left - layerRect.left);
+                const nextY = minY + (textLayerRect.top - layerRect.top);
+                const nextW = Math.max(1, maxX - minX);
+                const nextH = Math.max(1, maxY - minY);
+
+                mark.x = Math.max(0, Math.min(layerW, nextX));
+                mark.y = Math.max(0, Math.min(layerH, nextY));
+                mark.width = Math.max(1, Math.min(layerW - mark.x, nextW));
+                mark.height = Math.max(1, Math.min(layerH - mark.y, nextH));
+
+                // 同步比例座標
+                mark.xPct = mark.x / layerW;
+                mark.yPct = mark.y / layerH;
+                mark.wPct = mark.width / layerW;
+                mark.hPct = mark.height / layerH;
+            }
+        }
+        // 若沒有文字 idx，才退回用比例座標換算回 px（跨螢幕大小不跑位）
+        else if (layerW > 0 && layerH > 0) {
             const hasPct = (typeof mark.xPct === 'number') && (typeof mark.yPct === 'number') &&
                            (typeof mark.wPct === 'number') && (typeof mark.hPct === 'number');
             if (!hasPct) {
