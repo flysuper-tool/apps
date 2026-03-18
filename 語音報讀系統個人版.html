@@ -480,6 +480,7 @@ audio {
         }
  input[type=range] {
     -webkit-appearance: none;
+    appearance: none;
     width: 300px;
     height: 20px;
     background: linear-gradient(145deg, #d4d4d4, #f0f0f0);
@@ -3314,6 +3315,35 @@ let originalPdfBytes = null; // 保存原始PDF字節
 let pdfPasswordHash = null; // PDF密碼哈希（用於驗證）
 let currentSessionPassword = null; // 當前會話的密碼（避免重複輸入）
 
+// 以「文字層」為準：把標記層座標轉成文字層相對比例，避免縮放/不同螢幕時錯位
+function updateMarkTextLayerRatios(mark, pageNum) {
+    try {
+        const markLayer = document.querySelector(`.mark-layer[data-page-num="${pageNum}"]`);
+        if (!markLayer) return;
+        const pdfViewer = markLayer.parentElement;
+        if (!pdfViewer) return;
+        const textLayer = pdfViewer.querySelector('.textLayer');
+        if (!textLayer) return;
+
+        const markLayerRect = markLayer.getBoundingClientRect();
+        const textLayerRect = textLayer.getBoundingClientRect();
+        if (!markLayerRect.width || !markLayerRect.height || !textLayerRect.width || !textLayerRect.height) return;
+
+        // 將 markLayer 內的像素座標換算到 textLayer 的本地座標，再轉為比例
+        const leftInText = mark.x + (markLayerRect.left - textLayerRect.left);
+        const topInText = mark.y + (markLayerRect.top - textLayerRect.top);
+        const rightInText = (mark.x + mark.width) + (markLayerRect.left - textLayerRect.left);
+        const bottomInText = (mark.y + mark.height) + (markLayerRect.top - textLayerRect.top);
+
+        mark.tlXRatio = leftInText / textLayerRect.width;
+        mark.tlYRatio = topInText / textLayerRect.height;
+        mark.tlWidthRatio = (rightInText - leftInText) / textLayerRect.width;
+        mark.tlHeightRatio = (bottomInText - topInText) / textLayerRect.height;
+    } catch (err) {
+        console.warn('updateMarkTextLayerRatios 失敗:', err);
+    }
+}
+
 // 密碼哈希函數（使用簡單的哈希算法）
 async function hashPassword(password) {
     if (!password) return null;
@@ -5022,31 +5052,29 @@ function finishMark(e) {
             marks[currentMark.pageNum] = [];
         }
 
-        // 以標記層尺寸換算成比例座標，避免瀏覽器縮放或視窗尺寸改變時錯位
-        const markLayerForRatio = document.querySelector(`.mark-layer[data-page-num="${currentMark.pageNum}"]`);
-        const layerRectForRatio = markLayerForRatio ? markLayerForRatio.getBoundingClientRect() : null;
-        const layerWidth = layerRectForRatio && layerRectForRatio.width ? layerRectForRatio.width : (markLayerForRatio ? markLayerForRatio.offsetWidth : 0);
-        const layerHeight = layerRectForRatio && layerRectForRatio.height ? layerRectForRatio.height : (markLayerForRatio ? markLayerForRatio.offsetHeight : 0);
-
-        const xRatio = layerWidth > 0 ? currentMark.x / layerWidth : null;
-        const yRatio = layerHeight > 0 ? currentMark.y / layerHeight : null;
-        const widthRatio = layerWidth > 0 ? currentMark.width / layerWidth : null;
-        const heightRatio = layerHeight > 0 ? currentMark.height / layerHeight : null;
-
-        marks[currentMark.pageNum].push({
+        const newMark = {
             id: currentMark.id,
             x: currentMark.x,
             y: currentMark.y,
             width: currentMark.width,
             height: currentMark.height,
-            // 以比例記錄，重新渲染時可依當前頁面實際大小重算像素
-            xRatio,
-            yRatio,
-            widthRatio,
-            heightRatio,
+            // 保留舊的標記層比例（向後相容/備援）
+            xRatio: null,
+            yRatio: null,
+            widthRatio: null,
+            heightRatio: null,
+            // 以文字層為準的比例（主要用於跨縮放/跨裝置不錯位）
+            tlXRatio: null,
+            tlYRatio: null,
+            tlWidthRatio: null,
+            tlHeightRatio: null,
             text: '', // 將在點擊時提取
             replacementText: '' // 替換文字，用於錯誤發音修正
-        });
+        };
+
+        // 先存入 marks，再補上文字層比例（需要 DOM 已在頁面）
+        marks[currentMark.pageNum].push(newMark);
+        updateMarkTextLayerRatios(newMark, currentMark.pageNum);
         
         // 保存標記ID和頁碼、此區塊 DOM，避免閉包問題（多區塊時每個區塊各自綁定）
         const markId = currentMark.id;
@@ -5444,14 +5472,8 @@ function finishMark(e) {
                             updatedMark.width = finalWidth;
                             updatedMark.height = finalHeight;
 
-                            // 重新換算比例座標，確保縮放或視窗大小改變時標記位置能正確對齊
-                            const markLayerRectForRatio = markLayer.getBoundingClientRect();
-                            if (markLayerRectForRatio && markLayerRectForRatio.width > 0 && markLayerRectForRatio.height > 0) {
-                                updatedMark.xRatio = updatedMark.x / markLayerRectForRatio.width;
-                                updatedMark.yRatio = updatedMark.y / markLayerRectForRatio.height;
-                                updatedMark.widthRatio = updatedMark.width / markLayerRectForRatio.width;
-                                updatedMark.heightRatio = updatedMark.height / markLayerRectForRatio.height;
-                            }
+                            // 以文字層為準：更新文字層比例座標，確保縮放/不同螢幕不錯位
+                            updateMarkTextLayerRatios(updatedMark, markPageNum);
                             
                             // 如果調整了大小，重新提取文字
                             if (markState.isResizing && sizeChanged) {
@@ -6354,6 +6376,11 @@ async function loadMarksFromPdf() {
                             if (!mark.hasOwnProperty('locked')) {
                                 mark.locked = false;
                             }
+                            // 文字層比例（新格式），若不存在則保留為 null，render 時會回退到舊格式或像素
+                            if (!mark.hasOwnProperty('tlXRatio')) mark.tlXRatio = null;
+                            if (!mark.hasOwnProperty('tlYRatio')) mark.tlYRatio = null;
+                            if (!mark.hasOwnProperty('tlWidthRatio')) mark.tlWidthRatio = null;
+                            if (!mark.hasOwnProperty('tlHeightRatio')) mark.tlHeightRatio = null;
                         });
                     }
                 });
@@ -6425,19 +6452,31 @@ function renderMarks() {
             return;
         }
         
-        // 如果有比例座標，依目前標記層大小換算實際像素，避免瀏覽器縮放或視窗尺寸改變時錯位
-        if (markLayerRect && markLayerRect.width > 0 && markLayerRect.height > 0 &&
-            typeof mark.xRatio === 'number' && typeof mark.yRatio === 'number' &&
-            typeof mark.widthRatio === 'number' && typeof mark.heightRatio === 'number') {
-            const calcX = mark.xRatio * markLayerRect.width;
-            const calcY = mark.yRatio * markLayerRect.height;
-            const calcWidth = mark.widthRatio * markLayerRect.width;
-            const calcHeight = mark.heightRatio * markLayerRect.height;
+        // 以文字層為準：依文字層比例換算回標記層像素，縮放/不同螢幕也不會錯位
+        if (textLayerRect && markLayerRect &&
+            textLayerRect.width > 0 && textLayerRect.height > 0 &&
+            markLayerRect.width > 0 && markLayerRect.height > 0 &&
+            typeof mark.tlXRatio === 'number' && typeof mark.tlYRatio === 'number' &&
+            typeof mark.tlWidthRatio === 'number' && typeof mark.tlHeightRatio === 'number') {
+            const leftInText = mark.tlXRatio * textLayerRect.width;
+            const topInText = mark.tlYRatio * textLayerRect.height;
+            const widthInText = mark.tlWidthRatio * textLayerRect.width;
+            const heightInText = mark.tlHeightRatio * textLayerRect.height;
 
+            const calcX = leftInText + (textLayerRect.left - markLayerRect.left);
+            const calcY = topInText + (textLayerRect.top - markLayerRect.top);
             mark.x = calcX;
             mark.y = calcY;
-            mark.width = calcWidth;
-            mark.height = calcHeight;
+            mark.width = widthInText;
+            mark.height = heightInText;
+        } else if (markLayerRect && markLayerRect.width > 0 && markLayerRect.height > 0 &&
+            typeof mark.xRatio === 'number' && typeof mark.yRatio === 'number' &&
+            typeof mark.widthRatio === 'number' && typeof mark.heightRatio === 'number') {
+            // 備援：舊版標記（只有標記層比例）仍可正常縮放
+            mark.x = mark.xRatio * markLayerRect.width;
+            mark.y = mark.yRatio * markLayerRect.height;
+            mark.width = mark.widthRatio * markLayerRect.width;
+            mark.height = mark.heightRatio * markLayerRect.height;
         }
 
         // 確保標記尺寸合理
