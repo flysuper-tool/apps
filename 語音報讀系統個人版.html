@@ -2931,20 +2931,30 @@ document.addEventListener('mouseup', () => {
     }
 });
   
-// 使用 MutationObserver 監聽 DOM 變化
-const observer = new MutationObserver((mutationsList, observer) => {
+// 使用 MutationObserver 監聽與 PDF 文字層相關的 DOM 變化
+let isWrappingFraTags = false;
+const observer = new MutationObserver((mutationsList, observerInstance) => {
+    // 避免 wrapTextInFraTags 內部的 DOM 操作又觸發自己，造成無限迴圈
+    if (isWrappingFraTags) return;
     for (let mutation of mutationsList) {
         if (mutation.type === 'childList') {
-            wrapTextInFraTags();
+            isWrappingFraTags = true;
+            try {
+                wrapTextInFraTags();
+            } finally {
+                isWrappingFraTags = false;
+            }
+            break;
         }
     }
 });
 
-// 配置 MutationObserver 監聽的目標節點和選項
-const config = { childList: true, subtree: true };
-
-// 監聽整個 document 的變化
-observer.observe(document, config);
+// 只監聽 PDF 容器，而不是整個 document，減少 iPad / Safari 負擔
+document.addEventListener('DOMContentLoaded', () => {
+    const pdfContainerEl = document.getElementById('pdfContainer') || document;
+    const config = { childList: true, subtree: true };
+    observer.observe(pdfContainerEl, config);
+});
 
 // 確保在 DOM 完全加載後執行
 document.addEventListener('DOMContentLoaded', wrapTextInFraTags);
