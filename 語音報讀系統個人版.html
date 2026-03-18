@@ -5021,12 +5021,29 @@ function finishMark(e) {
         if (!marks[currentMark.pageNum]) {
             marks[currentMark.pageNum] = [];
         }
+
+        // 以標記層尺寸換算成比例座標，避免瀏覽器縮放或視窗尺寸改變時錯位
+        const markLayerForRatio = document.querySelector(`.mark-layer[data-page-num="${currentMark.pageNum}"]`);
+        const layerRectForRatio = markLayerForRatio ? markLayerForRatio.getBoundingClientRect() : null;
+        const layerWidth = layerRectForRatio && layerRectForRatio.width ? layerRectForRatio.width : (markLayerForRatio ? markLayerForRatio.offsetWidth : 0);
+        const layerHeight = layerRectForRatio && layerRectForRatio.height ? layerRectForRatio.height : (markLayerForRatio ? markLayerForRatio.offsetHeight : 0);
+
+        const xRatio = layerWidth > 0 ? currentMark.x / layerWidth : null;
+        const yRatio = layerHeight > 0 ? currentMark.y / layerHeight : null;
+        const widthRatio = layerWidth > 0 ? currentMark.width / layerWidth : null;
+        const heightRatio = layerHeight > 0 ? currentMark.height / layerHeight : null;
+
         marks[currentMark.pageNum].push({
             id: currentMark.id,
             x: currentMark.x,
             y: currentMark.y,
             width: currentMark.width,
             height: currentMark.height,
+            // 以比例記錄，重新渲染時可依當前頁面實際大小重算像素
+            xRatio,
+            yRatio,
+            widthRatio,
+            heightRatio,
             text: '', // 將在點擊時提取
             replacementText: '' // 替換文字，用於錯誤發音修正
         });
@@ -5426,6 +5443,15 @@ function finishMark(e) {
                             updatedMark.y = finalTop;
                             updatedMark.width = finalWidth;
                             updatedMark.height = finalHeight;
+
+                            // 重新換算比例座標，確保縮放或視窗大小改變時標記位置能正確對齊
+                            const markLayerRectForRatio = markLayer.getBoundingClientRect();
+                            if (markLayerRectForRatio && markLayerRectForRatio.width > 0 && markLayerRectForRatio.height > 0) {
+                                updatedMark.xRatio = updatedMark.x / markLayerRectForRatio.width;
+                                updatedMark.yRatio = updatedMark.y / markLayerRectForRatio.height;
+                                updatedMark.widthRatio = updatedMark.width / markLayerRectForRatio.width;
+                                updatedMark.heightRatio = updatedMark.height / markLayerRectForRatio.height;
+                            }
                             
                             // 如果調整了大小，重新提取文字
                             if (markState.isResizing && sizeChanged) {
@@ -6389,6 +6415,8 @@ function renderMarks() {
     // 清除舊的標記
     markLayer.innerHTML = '';
     
+    const markLayerRect = markLayer.getBoundingClientRect();
+
     marks[currentPage].forEach(mark => {
         // 驗證標記數據
         if (!mark || typeof mark.x !== 'number' || typeof mark.y !== 'number' || 
@@ -6397,6 +6425,21 @@ function renderMarks() {
             return;
         }
         
+        // 如果有比例座標，依目前標記層大小換算實際像素，避免瀏覽器縮放或視窗尺寸改變時錯位
+        if (markLayerRect && markLayerRect.width > 0 && markLayerRect.height > 0 &&
+            typeof mark.xRatio === 'number' && typeof mark.yRatio === 'number' &&
+            typeof mark.widthRatio === 'number' && typeof mark.heightRatio === 'number') {
+            const calcX = mark.xRatio * markLayerRect.width;
+            const calcY = mark.yRatio * markLayerRect.height;
+            const calcWidth = mark.widthRatio * markLayerRect.width;
+            const calcHeight = mark.heightRatio * markLayerRect.height;
+
+            mark.x = calcX;
+            mark.y = calcY;
+            mark.width = calcWidth;
+            mark.height = calcHeight;
+        }
+
         // 確保標記尺寸合理
         if (mark.width <= 0 || mark.height <= 0) {
             console.warn('標記尺寸無效:', mark);
