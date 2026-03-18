@@ -6431,6 +6431,11 @@ function renderMarks() {
         return;
     }
     
+    // 對應的文字層（以 textLayer 為準來對齊標記）
+    const pdfViewer = markLayer.parentElement;
+    const textLayerForCalc = pdfViewer ? pdfViewer.querySelector('.textLayer') : null;
+    const textLayerRect = textLayerForCalc ? textLayerForCalc.getBoundingClientRect() : null;
+
     // 檢查是否有標記正在被拖拽或調整大小
     // 如果有，則跳過重新渲染，避免中斷用戶操作
     const activeMarkBlocks = markLayer.querySelectorAll('.mark-block.dragging');
@@ -6452,6 +6457,14 @@ function renderMarks() {
             return;
         }
         
+        // 如果還沒有文字層比例但已有像素資訊，先依目前版面補算一次，讓舊資料也能顯示
+        if ((mark.tlXRatio == null && mark.tlYRatio == null &&
+             mark.tlWidthRatio == null && mark.tlHeightRatio == null) &&
+            typeof mark.x === 'number' && typeof mark.y === 'number' &&
+            typeof mark.width === 'number' && typeof mark.height === 'number') {
+            updateMarkTextLayerRatios(mark, currentPage);
+        }
+
         // 以文字層為準：依文字層比例換算回標記層像素，縮放/不同螢幕也不會錯位
         if (textLayerRect && markLayerRect &&
             textLayerRect.width > 0 && textLayerRect.height > 0 &&
