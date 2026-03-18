@@ -888,8 +888,16 @@ function renderPage(pageNum) {
                 span.style.transform = originalTransform.replace(/scale\([^)]+\)/, `scale(${1/dpi})`);
             }
             
-            // 在文字層渲染完成後，延遲渲染標記
+            // 在文字層渲染完成後，延遲處理文字包裝與渲染標記
             setTimeout(() => {
+                // 先將文字層中的 span 包成 <my-fra>，再依 my-fra 編號與鎖定標記
+                try {
+                    if (typeof wrapTextInFraTags === 'function') {
+                        wrapTextInFraTags();
+                    }
+                } catch (e) {
+                    console.warn('wrapTextInFraTags 在 renderPage 中執行失敗:', e);
+                }
                 // 文字層會被 wrapTextInFraTags 轉成 <my-fra>，先替同頁的 my-fra 編號
                 assignFraIndicesForPage(pageNum);
                 renderMarks();
@@ -2931,33 +2939,16 @@ document.addEventListener('mouseup', () => {
     }
 });
   
-// 使用 MutationObserver 監聽與 PDF 文字層相關的 DOM 變化
-let isWrappingFraTags = false;
-const observer = new MutationObserver((mutationsList, observerInstance) => {
-    // 避免 wrapTextInFraTags 內部的 DOM 操作又觸發自己，造成無限迴圈
-    if (isWrappingFraTags) return;
-    for (let mutation of mutationsList) {
-        if (mutation.type === 'childList') {
-            isWrappingFraTags = true;
-            try {
-                wrapTextInFraTags();
-            } finally {
-                isWrappingFraTags = false;
-            }
-            break;
+// 保留 DOMContentLoaded 時的初次包裝（此時 PDF 文字層可能尚未建立，真正的包裝會在 renderPage 中再次執行）
+document.addEventListener('DOMContentLoaded', () => {
+    try {
+        if (typeof wrapTextInFraTags === 'function') {
+            wrapTextInFraTags();
         }
+    } catch (e) {
+        console.warn('wrapTextInFraTags 在 DOMContentLoaded 中執行失敗:', e);
     }
 });
-
-// 只監聽 PDF 容器，而不是整個 document，減少 iPad / Safari 負擔
-document.addEventListener('DOMContentLoaded', () => {
-    const pdfContainerEl = document.getElementById('pdfContainer') || document;
-    const config = { childList: true, subtree: true };
-    observer.observe(pdfContainerEl, config);
-});
-
-// 確保在 DOM 完全加載後執行
-document.addEventListener('DOMContentLoaded', wrapTextInFraTags);
 document.getElementById('resize-bottom').addEventListener('mousedown', (e) => resizeFrame(e, 'bottom'));
 document.getElementById('resize-right').addEventListener('mousedown', (e) => resizeFrame(e, 'right'));
 
