@@ -3316,17 +3316,23 @@ let pdfPasswordHash = null; // PDF密碼哈希（用於驗證）
 let currentSessionPassword = null; // 當前會話的密碼（避免重複輸入）
 
 // 以「文字層」為準：把標記層座標轉成文字層相對比例，避免縮放/不同螢幕時錯位
-function updateMarkTextLayerRatios(mark, pageNum) {
+// 可選擇傳入已計算好的 rect，避免在大量標記時重複呼叫 getBoundingClientRect 造成卡頓
+function updateMarkTextLayerRatios(mark, pageNum, cachedMarkLayerRect = null, cachedTextLayerRect = null) {
     try {
-        const markLayer = document.querySelector(`.mark-layer[data-page-num="${pageNum}"]`);
-        if (!markLayer) return;
-        const pdfViewer = markLayer.parentElement;
-        if (!pdfViewer) return;
-        const textLayer = pdfViewer.querySelector('.textLayer');
-        if (!textLayer) return;
+        let markLayerRect = cachedMarkLayerRect;
+        let textLayerRect = cachedTextLayerRect;
 
-        const markLayerRect = markLayer.getBoundingClientRect();
-        const textLayerRect = textLayer.getBoundingClientRect();
+        if (!markLayerRect || !textLayerRect) {
+            const markLayer = document.querySelector(`.mark-layer[data-page-num="${pageNum}"]`);
+            if (!markLayer) return;
+            const pdfViewer = markLayer.parentElement;
+            if (!pdfViewer) return;
+            const textLayer = pdfViewer.querySelector('.textLayer');
+            if (!textLayer) return;
+
+            markLayerRect = markLayer.getBoundingClientRect();
+            textLayerRect = textLayer.getBoundingClientRect();
+        }
         if (!markLayerRect.width || !markLayerRect.height || !textLayerRect.width || !textLayerRect.height) return;
 
         // 將 markLayer 內的像素座標換算到 textLayer 的本地座標，再轉為比例
@@ -5074,6 +5080,7 @@ function finishMark(e) {
 
         // 先存入 marks，再補上文字層比例（需要 DOM 已在頁面）
         marks[currentMark.pageNum].push(newMark);
+        // 新增單一標記時計算比例，這裡標記數量少，對效能影響較小
         updateMarkTextLayerRatios(newMark, currentMark.pageNum);
         
         // 保存標記ID和頁碼、此區塊 DOM，避免閉包問題（多區塊時每個區塊各自綁定）
@@ -6458,11 +6465,13 @@ function renderMarks() {
         }
         
         // 如果還沒有文字層比例但已有像素資訊，先依目前版面補算一次，讓舊資料也能顯示
-        if ((mark.tlXRatio == null && mark.tlYRatio == null &&
-             mark.tlWidthRatio == null && mark.tlHeightRatio == null) &&
+        if (!mark._tlInited &&
+            mark.tlXRatio == null && mark.tlYRatio == null &&
+            mark.tlWidthRatio == null && mark.tlHeightRatio == null &&
             typeof mark.x === 'number' && typeof mark.y === 'number' &&
             typeof mark.width === 'number' && typeof mark.height === 'number') {
-            updateMarkTextLayerRatios(mark, currentPage);
+            updateMarkTextLayerRatios(mark, currentPage, markLayerRect, textLayerRect);
+            mark._tlInited = true;
         }
 
         // 以文字層為準：依文字層比例換算回標記層像素，縮放/不同螢幕也不會錯位
@@ -7070,8 +7079,54 @@ async function saveMarksToPdf(showNotification = true) {
         const { PDFDocument } = PDFLib;
         const pdfDocLib = await PDFDocument.load(originalPdfBytes);
         
-        // 將標記數據轉換為JSON字符串
-        const marksJson = JSON.stringify(marks);
+        // 在保存前，為每一頁可見的標記補齊比例資訊，並建立乾淨的索引資料（不含暫存旗標）
+        const cleanMarks = {};
+        const viewerContainer = document.getElementById('viewerContainer');
+        const allPageNums = Object.keys(marks || {});
+        allPageNums.forEach(pageNum => {
+            const pageMarks = marks[pageNum];
+            if (!Array.isArray(pageMarks) || pageMarks.length === 0) return;
+
+            // 嘗試取得該頁的標記層與文字層（若該頁尚未渲染，就跳過比例計算）
+            let markLayerRect = null;
+            let textLayerRect = null;
+            const markLayer = document.querySelector(`.mark-layer[data-page-num="${pageNum}"]`);
+            if (markLayer) {
+                markLayerRect = markLayer.getBoundingClientRect();
+                const pdfViewer = markLayer.parentElement;
+                const textLayer = pdfViewer ? pdfViewer.querySelector('.textLayer') : null;
+                if (textLayer) {
+                    textLayerRect = textLayer.getBoundingClientRect();
+                }
+            }
+
+            cleanMarks[pageNum] = pageMarks.map(m => {
+                const mark = { ...m };
+
+                // 若有 rect 可用，補齊文字層比例與標記層比例
+                if (markLayerRect && textLayerRect &&
+                    typeof mark.x === 'number' && typeof mark.y === 'number' &&
+                    typeof mark.width === 'number' && typeof mark.height === 'number') {
+                    updateMarkTextLayerRatios(mark, parseInt(pageNum, 10), markLayerRect, textLayerRect);
+
+                    if (!mark.xRatio && !mark.yRatio && !mark.widthRatio && !mark.heightRatio &&
+                        markLayerRect.width > 0 && markLayerRect.height > 0) {
+                        mark.xRatio = mark.x / markLayerRect.width;
+                        mark.yRatio = mark.y / markLayerRect.height;
+                        mark.widthRatio = mark.width / markLayerRect.width;
+                        mark.heightRatio = mark.height / markLayerRect.height;
+                    }
+                }
+
+                // 不把只在記憶體用的暫存旗標寫進 PDF
+                delete mark._tlInited;
+
+                return mark;
+            });
+        });
+
+        // 將標記數據轉換為JSON字符串（使用整理後的 cleanMarks 作為索引寫入 PDF）
+        const marksJson = JSON.stringify(cleanMarks);
         
         // 將標記數據保存到PDF的元數據中（使用自定義屬性）
         // 使用 Subject 欄位來存儲標記數據（因為這是標準元數據欄位，不會影響PDF顯示）
