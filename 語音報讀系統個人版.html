@@ -1659,47 +1659,27 @@ if (clearCacheButton) {
 
       // 針對 iPad，可能需要等待語音列表載入
       const trySpeak = () => {
+          // 若語音清單尚未載入，則找不到 voice。
+          // 但部分瀏覽器/iOS 規則要求 speak 必須在使用者觸發內，延後 setTimeout 可能直接導致不發音。
+          // 因此：即使找不到對應 voice，也先用預設語音立即 speak，語言/速率照樣設定。
           const voice = findLocalVoice(langPrefix);
-          if (!voice) {
-              console.warn('找不到對應的本機語音，無法朗讀');
-              // 如果是中文且找不到語音，再試一次（iPad 可能需要時間載入）
-              if (langPrefix === 'zh' || langPrefix === 'en') {
-                  var delay = (typeof isIOS !== 'undefined' && isIOS) ? 500 : 200;
-                  setTimeout(() => {
-                      const retryVoice = findLocalVoice(langPrefix);
-                      if (retryVoice) {
-                          doSpeak(retryVoice);
-                      } else if (typeof isIOS !== 'undefined' && isIOS) {
-                          setTimeout(() => {
-                              const retry2 = findLocalVoice(langPrefix);
-                              if (retry2) doSpeak(retry2);
-                              else { console.error('重試後仍找不到本機語音'); if (callback) callback(); }
-                          }, 800);
-                      } else {
-                          console.error('重試後仍找不到本機語音');
-                          if (callback) callback();
-                      }
-                  }, delay);
-                  return;
-              }
-              if (callback) callback();
-              return;
-          }
-          doSpeak(voice);
+          doSpeak(voice || null);
       };
 
       const doSpeak = (voice) => {
           const utterance = new SpeechSynthesisUtterance(text);
-          utterance.voice = voice;
+          if (voice) {
+              utterance.voice = voice;
+          }
           
           // 明確設定語言（iPad 需要）
           if (langPrefix === 'zh') {
               // 優先使用語音的原始語言代碼，否則使用常見的中文代碼
-              utterance.lang = voice.lang || 'zh-TW';
+              utterance.lang = (voice && voice.lang) ? voice.lang : 'zh-TW';
           } else if (langPrefix === 'en') {
-              utterance.lang = voice.lang || 'en-US';
+              utterance.lang = (voice && voice.lang) ? voice.lang : 'en-US';
           } else {
-              utterance.lang = voice.lang || langPrefix;
+              utterance.lang = (voice && voice.lang) ? voice.lang : langPrefix;
           }
 
           // 將 -50% ~ +50% 映射成約 0.5 ~ 1.5 區間
@@ -1716,11 +1696,11 @@ if (clearCacheButton) {
           };
           utterance.onerror = (e) => {
               console.error('本機語音朗讀錯誤：', e);
-              console.error('錯誤詳情 - 語音:', voice.name, '語言:', voice.lang, '文字長度:', text.length);
+              console.error('錯誤詳情 - 語音:', voice ? voice.name : '(預設語音)', '語言:', voice ? voice.lang : '(預設語言)', '文字長度:', text.length);
               if (callback) callback();
           };
           utterance.onstart = () => {
-              console.log('開始朗讀 - 語音:', voice.name, '語言:', voice.lang);
+              console.log('開始朗讀 - 語音:', voice ? voice.name : '(預設語音)', '語言:', voice ? voice.lang : '(預設語言)');
           };
 
           try {
@@ -2003,12 +1983,12 @@ window.sendTextToTTS = sendTextToTTS;
         const selectAllTextButton = document.getElementById('select-all-text');
         let sentences = [];
         let currentSentenceIndex = 0;
-        let isReading = false;
+        let isSelectAllReading = false;
 
         selectAllTextButton.addEventListener('click', function() {
-            if (!isReading) unlockLocalSpeechForIOS();
+            if (!isSelectAllReading) unlockLocalSpeechForIOS();
             clearHighlights();
-            if (isReading) {
+            if (isSelectAllReading) {
                 // 取消朗讀
                 cancelReading();
             } else {
@@ -2034,7 +2014,7 @@ window.sendTextToTTS = sendTextToTTS;
                 const cleanedText = fullText.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
                 sentences = cleanedText.split(/(?<=[。！？])/); // 根據標點符號分句
                 currentSentenceIndex = 0;
-                isReading = true;
+                isSelectAllReading = true;
 
                 // 立即更新按鈕樣式和文本
                 selectAllTextButton.textContent = "取消朗讀";
@@ -2046,7 +2026,7 @@ window.sendTextToTTS = sendTextToTTS;
         });
 
 function cancelReading() {
-  isReading = false;
+  isSelectAllReading = false;
   
   // 停止本機語音
   try {
@@ -2109,7 +2089,7 @@ function startReading() {
 
 function readNextSentence() {
     // 檢查是否仍在朗讀狀態，如果已取消則不繼續
-    if (!isReading) {
+    if (!isSelectAllReading) {
         return;
     }
     
@@ -2118,15 +2098,15 @@ function readNextSentence() {
         highlightCurrentSentence(sentence);
         sendTextToTTS(sentence, function() {
             // 再次檢查是否仍在朗讀狀態，防止在播放過程中取消
-            if (!isReading) {
+            if (!isSelectAllReading) {
                 return;
             }
             
             currentSentenceIndex++;
-            if (currentSentenceIndex < sentences.length && isReading) {
+            if (currentSentenceIndex < sentences.length && isSelectAllReading) {
                 readNextSentence();
             } else {
-                isReading = false;
+                isSelectAllReading = false;
                 clearHighlights();
                 selectAllTextButton.textContent = "整頁朗讀";
                 selectAllTextButton.classList.remove('button-danger');
@@ -2798,6 +2778,8 @@ document.addEventListener('mouseup', () => {
         }
     }
 }
+        let isTouchSelectReading = false;
+
         function sendHighlightedText() {
             unlockLocalSpeechForIOS();
             // 清除標記替換緩存
@@ -2849,7 +2831,7 @@ document.addEventListener('mouseup', () => {
                 document.getElementById('sendButton').textContent = "朗讀選取文字";
                 document.getElementById('sendButton').classList.remove('button-danger');
                 document.getElementById('sendButton').classList.add('button-light');
-                isReading = false;
+                isTouchSelectReading = false;
             });
         }
 
@@ -2866,11 +2848,21 @@ document.addEventListener('mouseup', () => {
             }
         }
 
-        document.getElementById('sendButton').addEventListener('click', sendHighlightedText);
+        // 由下方的 sendButton 切換事件統一處理「朗讀/取消」
+        // 避免同一個按鈕綁定兩個 click 造成：取消時又重啟朗讀、導致按鈕狀態不會正確回復
+        // document.getElementById('sendButton').addEventListener('click', sendHighlightedText);
         document.getElementById('clearButton').addEventListener('click', clearHighlights);
         document.getElementById('touchSelectCheckbox').addEventListener('change', function() {
             const isChecked = this.checked;
             clearHighlights();
+            isTouchSelectReading = false;
+            const sendButtonEl = document.getElementById('sendButton');
+            // 切換觸控選取開/關時，確保按鈕狀態回到「朗讀選取文字」
+            if (sendButtonEl) {
+                sendButtonEl.textContent = "朗讀選取文字";
+                sendButtonEl.classList.remove('button-danger');
+                sendButtonEl.classList.add('button-light');
+            }
             document.getElementById('sendButton').style.display = isChecked ? 'block' : 'none';
             document.getElementById('clearButton').style.display = isChecked ? 'block' : 'none';                        
             document.getElementById('select-all-text').style.display = isChecked ? 'none' : 'block';            
@@ -2886,20 +2878,20 @@ document.addEventListener('mouseup', () => {
         wrapTextInFraTags();
         
         document.getElementById('sendButton').addEventListener('click', function() {
-    if (isReading) {
+    if (isTouchSelectReading) {
         // 取消朗讀
         window.speechSynthesis.cancel();
         this.textContent = "朗讀選取文字";
         this.classList.remove('button-danger');
         this.classList.add('button-light');
-        isReading = false;
+        isTouchSelectReading = false;
     } else {
         // 開始朗讀
         sendHighlightedText();
         this.textContent = "取消朗讀";
         this.classList.remove('button-light');
         this.classList.add('button-danger');
-        isReading = true;
+        isTouchSelectReading = true;
     }
 });
   
