@@ -6466,7 +6466,7 @@ async function loadMarksFromPdf() {
     }
 }
 
-// 渲染標記
+// 渲染標記：讀取時僅依區塊左上/右下（x,y,width,height）畫輕量可點擊區；完整 DOM 與大量事件僅在編輯模式（isMarkingMode）建立
 function renderMarks() {
     if (!marks[currentPage] || marks[currentPage].length === 0) {
         // 清除標記層內容
@@ -6552,7 +6552,7 @@ function renderMarks() {
             return;
         }
         
-        // 非編輯模式：僅透明可點擊區（最少 DOM/事件，適合 iPad），不顯示任何視覺
+        // 讀取模式：僅用區塊左上 (x,y) 與右下 (x+width, y+height) 定義的矩形，1 個 div + 1 個 click，無完整 DOM/大量事件
         if (!isMarkingMode) {
             const wrap = document.createElement('div');
             wrap.className = 'mark-lightweight';
@@ -6571,6 +6571,7 @@ function renderMarks() {
             return;
         }
         
+        // 以下僅在「需要編輯標記」時使用：完整 DOM（工具列、8 個 resize-handle、多個事件）
         const markBlock = document.createElement('div');
         markBlock.className = 'mark-block';
         markBlock.dataset.markId = mark.id;
