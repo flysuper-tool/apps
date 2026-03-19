@@ -306,6 +306,37 @@ audio {
         .mark-layer.hidden {
             display: none !important;
         }
+        /* 輕量標記（僅左上/右下角標籤，省 DOM 與事件，適合 iPad） */
+        .mark-lightweight {
+            position: absolute;
+            pointer-events: auto;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            box-sizing: border-box;
+        }
+        .mark-lightweight .mark-corner-tl {
+            position: absolute;
+            left: 0;
+            top: 0;
+            background-color: #007BFF;
+            color: white;
+            padding: 1px 4px;
+            font-size: 10px;
+            border-radius: 2px;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+        .mark-lightweight .mark-corner-br {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            width: 6px;
+            height: 6px;
+            background-color: #007BFF;
+            border-radius: 50%;
+            pointer-events: none;
+        }
         /* 確保標記框在標記層中可見 */
         .mark-layer.marking-mode {
             display: block !important;
@@ -4802,55 +4833,27 @@ async function toggleMarkingMode() {
             currentMark = null;
         }
         
-        // 禁用標記層的事件與點擊，避免擋住底層文字點擊發音
-        const markLayers = document.querySelectorAll('.mark-layer');
-        markLayers.forEach(layer => {
-            layer.classList.remove('marking-mode');
-            // 讓標記層本身不再攔截任何游標事件
-            layer.style.pointerEvents = 'none';
-            layer.style.display = 'none';
-        });
-        
-        // 隱藏所有標記區塊的視覺顯示，並一併關閉點擊功能
-        const markBlocks = document.querySelectorAll('.mark-block');
-        markBlocks.forEach(block => {
-            // 隱藏視覺顯示並移除點擊能力，避免干擾文字點擊發音
-            block.style.opacity = '0';
-            block.style.pointerEvents = 'none';
-            block.style.backgroundColor = 'transparent'; // 確保背景透明
-            block.style.border = 'none'; // 隱藏邊框
-            // 隱藏標籤、編輯按鈕和刪除按鈕
-            const label = block.querySelector('.mark-label');
-            const editBtn = block.querySelector('.mark-edit');
-            const deleteBtn = block.querySelector('.mark-delete');
-            if (label) label.style.display = 'none';
-            if (editBtn) editBtn.style.display = 'none';
-            if (deleteBtn) deleteBtn.style.display = 'none';
-        });
-        
         // 移除 PDF viewer 和標記層上的事件監聽器
         let pdfViewersForRemoveEvents = document.querySelectorAll('.pdf-viewer');
         pdfViewersForRemoveEvents.forEach(viewer => {
             viewer.removeEventListener('mousedown', handleViewerMouseDown);
             viewer.removeEventListener('touchstart', handleViewerTouchStart);
         });
-        
-        // 移除標記層上的事件監聽器
         const markLayersForRemoveEvents = document.querySelectorAll('.mark-layer');
         markLayersForRemoveEvents.forEach(layer => {
             layer.removeEventListener('mousedown', handleViewerMouseDown);
             layer.removeEventListener('touchstart', handleViewerTouchStart);
         });
-
-        // 取消標記後，自動重新載入頁面，確保發音功能與各種事件完整恢復
-        // 使用 setTimeout 確保當前狀態更新完成再重新載入
-        setTimeout(() => {
-            try {
-                window.location.reload();
-            } catch (e) {
-                console.error('重新載入頁面失敗:', e);
-            }
-        }, 100);
+        
+        // 清除完整 DOM，改為輕量角標渲染（不整頁重載，省 iPad 效能）
+        const markLayers = document.querySelectorAll('.mark-layer');
+        markLayers.forEach(layer => {
+            layer.classList.remove('marking-mode');
+            layer.style.pointerEvents = 'none';
+            layer.style.display = 'block';
+            layer.innerHTML = '';
+        });
+        renderMarks();
     }
 }
 
@@ -6504,6 +6507,25 @@ function renderMarks() {
         // 確保標記尺寸合理
         if (mark.width <= 0 || mark.height <= 0) {
             console.warn('標記尺寸無效:', mark);
+            return;
+        }
+        
+        // 非編輯模式：僅透明可點擊區（最少 DOM/事件，適合 iPad），不顯示任何視覺
+        if (!isMarkingMode) {
+            const wrap = document.createElement('div');
+            wrap.className = 'mark-lightweight';
+            wrap.dataset.markId = mark.id;
+            wrap.style.left = mark.x + 'px';
+            wrap.style.top = mark.y + 'px';
+            wrap.style.width = mark.width + 'px';
+            wrap.style.height = mark.height + 'px';
+            const markId = mark.id;
+            wrap.addEventListener('click', function(e) {
+                e.stopPropagation();
+                readMarkBlock(markId, currentPage);
+                saveMarksToPdf(false);
+            });
+            markLayer.appendChild(wrap);
             return;
         }
         
