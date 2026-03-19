@@ -3302,6 +3302,7 @@ let isManualMarkingEnabled = false; // 追蹤手動標記是否已經啟用
 let currentMark = null;
 let marks = {}; // 存儲所有標記 {pageNum: [{id, x, y, width, height, text}]}
 let markIdCounter = 0;
+let isCloudFileMode = false; // 雲端/網路檔案模式：允許顯示標記，但禁止保存與真正清除
 let originalPdfBytes = null; // 保存原始PDF字節
 let pdfPasswordHash = null; // PDF密碼哈希（用於驗證）
 let currentSessionPassword = null; // 當前會話的密碼（避免重複輸入）
@@ -4416,36 +4417,35 @@ async function toggleMarkingMode() {
     
     // 如果進入標記模式，先檢查是否為本地檔案
     if (!isMarkingMode) {
+        isCloudFileMode = false;
         // 檢查是否為本地檔案
         const urlParams = new URLSearchParams(window.location.search);
         const fileParam = urlParams.get('file');
         
-        // 判斷檔案類型
-        if (fileParam) {
+            // 判斷檔案類型
+            if (fileParam) {
             const isLocalPdfFile = fileParam.toLowerCase().endsWith('.pdf');
             const isNetworkFile = fileParam.startsWith('http://') || fileParam.startsWith('https://');
             
-            // 如果不是本地PDF檔案（是雲端檔案或網路檔案），顯示警告
-            if (!isLocalPdfFile || isNetworkFile) {
+                // 雲端/網路檔案：允許「顯示標記」，但禁止「保存/真正清除」
+                isCloudFileMode = !isLocalPdfFile || isNetworkFile;
+                if (isCloudFileMode) {
                 await Swal.fire({
                     icon: 'warning',
-                    title: '標記功能限制',
+                        title: '雲端檔案模式',
                     html: `
                         <div style="text-align: left;">
                             <p style="margin-bottom: 15px; font-size: 16px; line-height: 1.6;">
-                                <strong>標記功能僅限本地PDF檔案使用</strong>
+                                <strong>可標記，但無法保存與真正清除</strong>
                             </p>
                             <p style="margin-bottom: 10px; font-size: 14px; line-height: 1.6; color: #666;">
-                                • 目前開啟的是雲端檔案，無法進行標記編輯
+                                • 你仍可在畫面上建立標記
                             </p>
                             <p style="margin-bottom: 15px; font-size: 14px; line-height: 1.6; color: #666;">
-                                • 如需使用標記功能，必須在左上角選擇本地檔案，才能進行標記
+                                • 但按下「保存/清除」不會真的生效（因為雲端檔案不可回寫）
                             </p>
                             <p style="margin-bottom: 0; font-size: 14px; line-height: 1.6; color: #666;">
-                                • 標記完成後，必須先「匯出PDF」才能保存標記
-                            </p>
-							<p style="margin-bottom: 0; font-size: 14px; line-height: 1.6; color: #666;">
-                                • 使用本系統可讀取本地或雲端已標記的PDF檔案進行發音
+                                • 點選「取消標記」後會回到原狀
                             </p>
                         </div>
                     `,
@@ -4456,7 +4456,7 @@ async function toggleMarkingMode() {
                     },
                     width: '500px'
                 });
-                return; // 不進入標記模式
+                // 不 return：雲端模式仍允許進入標記編輯（但保存/清除會被阻止）
             }
         }
         
@@ -7025,6 +7025,18 @@ async function saveMarksToPdf(showNotification = true) {
         }
         return;
     }
+
+    // 雲端/網路檔案模式：允許編輯標記，但不允許真正寫回/保存
+    if (isCloudFileMode) {
+        if (showNotification) {
+            Swal.fire({
+                icon: 'warning',
+                title: '雲端檔案無法保存',
+                text: '這個檔案無法回寫保存標記。你可以先用「取消標記」回復原狀，或改用本地PDF檔案保存。'
+            });
+        }
+        return;
+    }
     
     // 檢查 PDFLib 是否已載入
     if (typeof PDFLib === 'undefined') {
@@ -7140,6 +7152,15 @@ async function downloadMarkedPdf() {
         });
         return;
     }
+
+    if (isCloudFileMode) {
+        Swal.fire({
+            icon: 'warning',
+            title: '雲端檔案無法匯出保存',
+            text: '雲端檔案無法回寫保存標記，因此也無法匯出帶標記的PDF。請使用「取消標記」回到原狀，或改用本地PDF檔案。'
+        });
+        return;
+    }
     
     try {
         // 確保標記數據已保存到PDF文件
@@ -7197,7 +7218,9 @@ async function clearAllMarks() {
     Swal.fire({
         icon: 'warning',
         title: '確認清除',
-        text: '確定要清除所有標記嗎？',
+        text: isCloudFileMode
+            ? '雲端檔案模式：只能暫時清除畫面上的標記，無法真正清除/保存回 PDF。確定要繼續嗎？'
+            : '確定要清除所有標記嗎？',
         showCancelButton: true,
         confirmButtonText: '確定',
         cancelButtonText: '取消'
@@ -7209,14 +7232,23 @@ async function clearAllMarks() {
             markLayers.forEach(layer => {
                 layer.innerHTML = '';
             });
-            // 清除標記後，需要保存到PDF以更新PDF文件
-            if (typeof PDFLib !== 'undefined' && originalPdfBytes) {
+            // 清除標記後，需要保存到PDF以更新PDF文件（本地才允許）
+            if (!isCloudFileMode && typeof PDFLib !== 'undefined' && originalPdfBytes) {
                 saveMarksToPdf();
+            } else if (isCloudFileMode) {
+                // 雲端模式：不回寫，因此不會真正清除
+                Swal.fire({
+                    icon: 'warning',
+                    title: '雲端檔案無法真正清除',
+                    text: '此操作僅影響本次編輯畫面；請按「取消標記」回復原狀。',
+                    timer: 2200,
+                    showConfirmButton: false
+                });
             }
             Swal.fire({
                 icon: 'success',
                 title: '已清除',
-                text: '所有標記已清除',
+                text: isCloudFileMode ? '畫面上的標記已暫時清除' : '所有標記已清除',
                 timer: 1500,
                 showConfirmButton: false
             });
