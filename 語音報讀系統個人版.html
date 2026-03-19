@@ -2766,8 +2766,12 @@ if (typeof window !== 'undefined') {
   let isImageRecognizing = false; // 防止圖片辨識重複執行
   let isPlayingWaitingMessage = false; // 防止"圖片辨識中，請稍候"語音重複播放
 
- function wrapTextInFraTags() {
-    const markedContentSpans = document.querySelectorAll('span[role="presentation"]');
+ // 可傳入 root 僅處理該子樹（優化：避免整頁 query + 減少主線程阻塞）
+ function wrapTextInFraTags(optionalRoot) {
+    const base = optionalRoot && optionalRoot.nodeType === 1 ? optionalRoot : document;
+    const markedContentSpans = base.nodeType === 1 && base.tagName === 'SPAN' && base.getAttribute('role') === 'presentation'
+        ? [base]
+        : Array.from(base.querySelectorAll ? base.querySelectorAll('span[role="presentation"]') : []);
     
     markedContentSpans.forEach(span => {
         if (!span.dataset.processed) {
@@ -2777,11 +2781,8 @@ if (typeof window !== 'undefined') {
             for (let char of text) {
                 const fra = document.createElement('my-fra');
                 fra.textContent = char;
-                fra.style.cursor = 'pointer'; // 內聯樣式
-                fra.addEventListener('touchstart', highlightText);
-                fra.addEventListener('touchmove', highlightText);
-                fra.addEventListener('mousedown', startHighlight); // 新增滑鼠事件
-                fra.addEventListener('mousemove', highlightText); // 新增滑鼠事件
+                fra.style.cursor = 'pointer';
+                // 不再每個字綁 4 個監聽器，改由事件委派處理（省記憶體與註冊成本，適合 iPad）
                 fragment.appendChild(fra);
             }
             
@@ -2801,6 +2802,23 @@ function startHighlight(event) {
 document.addEventListener('mouseup', () => {
     isMouseDown = false;
 });
+
+// 事件委派：整頁僅 4 個監聽器，點/觸控時再判斷是否為 my-fra（大幅減少 iPad 負擔）
+let textLayerDelegationReady = false;
+function setupTextLayerEventDelegation() {
+    if (textLayerDelegationReady) return;
+    textLayerDelegationReady = true;
+    const delegate = (e) => {
+        if (!e.target.closest('.textLayer') || !e.target.closest('my-fra')) return;
+        if (e.type === 'mousedown') startHighlight(e);
+        else highlightText(e);
+    };
+    const opts = { passive: false };
+    document.body.addEventListener('touchstart', delegate, opts);
+    document.body.addEventListener('touchmove', delegate, opts);
+    document.body.addEventListener('mousedown', delegate, opts);
+    document.body.addEventListener('mousemove', delegate, opts);
+}
      function highlightText(event) {
      
     if (!document.getElementById('touchSelectCheckbox').checked) return; // 檢查核取方塊是否被選中
@@ -2935,13 +2953,27 @@ document.addEventListener('mouseup', () => {
     }
 });
   
-// 使用 MutationObserver 監聽 DOM 變化
-const observer = new MutationObserver((mutationsList, observer) => {
-    for (let mutation of mutationsList) {
-        if (mutation.type === 'childList') {
-            wrapTextInFraTags();
+// 使用 MutationObserver 監聽 DOM 變化（僅處理新增節點 + rAF 延後，避免 iPad 主線程阻塞）
+let wrapTextInFraTagsRaf = null;
+const observer = new MutationObserver((mutationsList) => {
+    let hasAdditions = false;
+    for (const mutation of mutationsList) {
+        if (mutation.type === 'childList' && mutation.addedNodes.length) {
+            hasAdditions = true;
+            break;
         }
     }
+    if (!hasAdditions) return;
+    if (wrapTextInFraTagsRaf) cancelAnimationFrame(wrapTextInFraTagsRaf);
+    wrapTextInFraTagsRaf = requestAnimationFrame(() => {
+        wrapTextInFraTagsRaf = null;
+        for (const mutation of mutationsList) {
+            if (mutation.type !== 'childList') continue;
+            mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === 1) wrapTextInFraTags(node);
+            });
+        }
+    });
 });
 
 // 配置 MutationObserver 監聽的目標節點和選項
@@ -2951,7 +2983,10 @@ const config = { childList: true, subtree: true };
 observer.observe(document, config);
 
 // 確保在 DOM 完全加載後執行
-document.addEventListener('DOMContentLoaded', wrapTextInFraTags);
+document.addEventListener('DOMContentLoaded', () => {
+    wrapTextInFraTags();
+    setupTextLayerEventDelegation();
+});
 document.getElementById('resize-bottom').addEventListener('mousedown', (e) => resizeFrame(e, 'bottom'));
 document.getElementById('resize-right').addEventListener('mousedown', (e) => resizeFrame(e, 'right'));
 
@@ -4469,8 +4504,15 @@ function initMarkingFeature() {
     if (downloadButtonToolbar) downloadButtonToolbar.addEventListener('click', downloadMarkedPdf);
     if (clearButtonToolbar) clearButtonToolbar.addEventListener('click', clearAllMarks);
     
-    // 載入已保存的標記（優先從PDF文件載入）
-    loadMarksFromPdf();
+    // 延後載入標記，避免與文字層渲染同時執行造成 iPad 記憶體/主線程爆量
+    const deferLoadMarks = () => {
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(() => loadMarksFromPdf(), { timeout: 1500 });
+        } else {
+            setTimeout(() => loadMarksFromPdf(), 1200);
+        }
+    };
+    deferLoadMarks();
 }
 
 // 切換標記模式
