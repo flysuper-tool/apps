@@ -4070,7 +4070,13 @@ ${fullText.trim()}
                                     text: targetText,
                                     replacementText: ''
                                 };
-                                
+                                const pdfCoords = viewportToPdfCoords(markX, markY, width, height, pageNum);
+                                if (pdfCoords) {
+                                    mark.pdfL = pdfCoords.pdfL;
+                                    mark.pdfT = pdfCoords.pdfT;
+                                    mark.pdfR = pdfCoords.pdfR;
+                                    mark.pdfB = pdfCoords.pdfB;
+                                }
                                 marks[pageNum].push(mark);
                                 pageCreatedMarksCount++;
                             }
@@ -4156,7 +4162,13 @@ ${fullText.trim()}
                                     text: targetText,
                                     replacementText: ''
                                 };
-                                
+                                const pdfCoordsExact = viewportToPdfCoords(markX, markY, width, height, pageNum);
+                                if (pdfCoordsExact) {
+                                    mark.pdfL = pdfCoordsExact.pdfL;
+                                    mark.pdfT = pdfCoordsExact.pdfT;
+                                    mark.pdfR = pdfCoordsExact.pdfR;
+                                    mark.pdfB = pdfCoordsExact.pdfB;
+                                }
                                 marks[pageNum].push(mark);
                                 pageCreatedMarksCount++;
                             }
@@ -5017,11 +5029,11 @@ function finishMark(e) {
     document.removeEventListener('touchend', finishMark, true);
     
     if (currentMark.width > 10 && currentMark.height > 10) {
-        // 保存標記
+        // 保存標記（並寫入 PDF 座標左上、右下角，供縮放/換螢幕時對齊）
         if (!marks[currentMark.pageNum]) {
             marks[currentMark.pageNum] = [];
         }
-        marks[currentMark.pageNum].push({
+        const newMark = {
             id: currentMark.id,
             x: currentMark.x,
             y: currentMark.y,
@@ -5029,7 +5041,15 @@ function finishMark(e) {
             height: currentMark.height,
             text: '', // 將在點擊時提取
             replacementText: '' // 替換文字，用於錯誤發音修正
-        });
+        };
+        const pdfCoords = viewportToPdfCoords(currentMark.x, currentMark.y, currentMark.width, currentMark.height, currentMark.pageNum);
+        if (pdfCoords) {
+            newMark.pdfL = pdfCoords.pdfL;
+            newMark.pdfT = pdfCoords.pdfT;
+            newMark.pdfR = pdfCoords.pdfR;
+            newMark.pdfB = pdfCoords.pdfB;
+        }
+        marks[currentMark.pageNum].push(newMark);
         
         // 保存標記ID和頁碼、此區塊 DOM，避免閉包問題（多區塊時每個區塊各自綁定）
         const markId = currentMark.id;
@@ -5418,7 +5438,7 @@ function finishMark(e) {
                 let shouldRead = false;
                 
                 if (markState.isDragging || markState.isResizing) {
-                    // 如果移動了位置或調整了大小，更新標記數據
+                    // 如果移動了位置或調整了大小，更新標記數據（含 PDF 座標左上、右下）
                     if (positionChanged || sizeChanged || markState.hasMoved) {
                         const updatedMark = marks[markPageNum].find(m => m.id === markId);
                         if (updatedMark) {
@@ -5426,15 +5446,19 @@ function finishMark(e) {
                             updatedMark.y = finalTop;
                             updatedMark.width = finalWidth;
                             updatedMark.height = finalHeight;
-                            
+                            const pdfCoords = viewportToPdfCoords(finalLeft, finalTop, finalWidth, finalHeight, markPageNum);
+                            if (pdfCoords) {
+                                updatedMark.pdfL = pdfCoords.pdfL;
+                                updatedMark.pdfT = pdfCoords.pdfT;
+                                updatedMark.pdfR = pdfCoords.pdfR;
+                                updatedMark.pdfB = pdfCoords.pdfB;
+                            }
                             // 如果調整了大小，重新提取文字
                             if (markState.isResizing && sizeChanged) {
                                 updatedMark.text = extractTextFromMark(updatedMark, markPageNum);
                                 console.log('標記大小已調整，重新提取文字:', updatedMark.text);
                             }
-                            
                             // 靜默保存（不顯示彈窗）
-                            // 等待保存完成後再移除 dragging class，確保不會被重新渲染中斷
                             await saveMarksToPdf(false);
                         }
                     } else if (markState.isDragging && !markState.isResizing) {
@@ -6246,6 +6270,44 @@ function updateMarksVisibility() {
     }
 }
 
+// 取得指定頁面的標記層 viewport 資訊（用於座標轉換）
+function getMarkLayerViewport(pageNum) {
+    const markLayer = document.querySelector(`.mark-layer[data-page-num="${pageNum}"]`);
+    if (!markLayer) return null;
+    const scale = parseFloat(markLayer.dataset.scale);
+    if (!scale || scale <= 0) return null;
+    const viewportWidth = parseFloat(markLayer.style.width) || markLayer.clientWidth;
+    const viewportHeight = parseFloat(markLayer.style.height) || markLayer.clientHeight;
+    if (!viewportWidth || !viewportHeight) return null;
+    return { scale, viewportWidth, viewportHeight };
+}
+
+// 將 viewport 像素座標（左上角 x,y 與 width, height）轉為 PDF 座標（僅儲存左上、右下兩角，單位為 PDF 點）
+// PDF 座標系：原點在左下，y 向上為正
+function viewportToPdfCoords(x, y, width, height, pageNum) {
+    const v = getMarkLayerViewport(pageNum);
+    if (!v) return null;
+    const { scale, viewportHeight } = v;
+    return {
+        pdfL: x / scale,
+        pdfT: (viewportHeight - y) / scale,
+        pdfR: (x + width) / scale,
+        pdfB: (viewportHeight - y - height) / scale
+    };
+}
+
+// 將 PDF 座標（左上、右下）轉為當前 viewport 像素，使區塊與 canvas/文字層對齊
+function pdfToViewportCoords(pdfL, pdfT, pdfR, pdfB, pageNum) {
+    const v = getMarkLayerViewport(pageNum);
+    if (!v) return null;
+    const { scale, viewportHeight } = v;
+    return {
+        left: pdfL * scale,
+        top: viewportHeight - pdfT * scale,
+        width: (pdfR - pdfL) * scale,
+        height: (pdfT - pdfB) * scale
+    };
+}
 
 // 從PDF文件載入標記（從PDF元數據中讀取）
 async function loadMarksFromPdf() {
@@ -6390,27 +6452,52 @@ function renderMarks() {
     markLayer.innerHTML = '';
     
     marks[currentPage].forEach(mark => {
-        // 驗證標記數據
-        if (!mark || typeof mark.x !== 'number' || typeof mark.y !== 'number' || 
-            typeof mark.width !== 'number' || typeof mark.height !== 'number') {
-            console.warn('無效的標記數據:', mark);
-            return;
+        // 優先使用 PDF 座標（左上、右下）轉為當前 viewport 像素，使縮放/換螢幕時區塊不跑掉
+        let left, top, width, height;
+        if (typeof mark.pdfL === 'number' && typeof mark.pdfT === 'number' &&
+            typeof mark.pdfR === 'number' && typeof mark.pdfB === 'number') {
+            const coords = pdfToViewportCoords(mark.pdfL, mark.pdfT, mark.pdfR, mark.pdfB, currentPage);
+            if (coords) {
+                left = coords.left;
+                top = coords.top;
+                width = coords.width;
+                height = coords.height;
+                // 同步到 mark 物件，供 getTextWithMarkReplacement、點擊判斷等使用
+                mark.x = left;
+                mark.y = top;
+                mark.width = width;
+                mark.height = height;
+            }
         }
-        
-        // 確保標記尺寸合理
-        if (mark.width <= 0 || mark.height <= 0) {
+        if (left === undefined) {
+            // 向後相容：無 PDF 座標時使用舊的像素值
+            if (!mark || typeof mark.x !== 'number' || typeof mark.y !== 'number' ||
+                typeof mark.width !== 'number' || typeof mark.height !== 'number') {
+                console.warn('無效的標記數據:', mark);
+                return;
+            }
+            if (mark.width <= 0 || mark.height <= 0) {
+                console.warn('標記尺寸無效:', mark);
+                return;
+            }
+            left = mark.x;
+            top = mark.y;
+            width = mark.width;
+            height = mark.height;
+        }
+        if (width <= 0 || height <= 0) {
             console.warn('標記尺寸無效:', mark);
             return;
         }
-        
+
         const markBlock = document.createElement('div');
         markBlock.className = 'mark-block';
         markBlock.dataset.markId = mark.id;
         markBlock.style.position = 'absolute';
-        markBlock.style.left = `${mark.x}px`;
-        markBlock.style.top = `${mark.y}px`;
-        markBlock.style.width = `${mark.width}px`;
-        markBlock.style.height = `${mark.height}px`;
+        markBlock.style.left = `${left}px`;
+        markBlock.style.top = `${top}px`;
+        markBlock.style.width = `${width}px`;
+        markBlock.style.height = `${height}px`;
         markBlock.style.display = 'block';
         markBlock.style.visibility = 'visible';
         
@@ -6434,7 +6521,7 @@ function renderMarks() {
         toolbar.className = 'mark-toolbar';
         
         // 如果標記框寬度不足（小於 80px），工具欄顯示在外部
-        if (mark.width < 80) {
+        if (width < 80) {
             toolbar.classList.add('small-box');
         }
         
@@ -6765,7 +6852,7 @@ function renderMarks() {
                 let shouldRead = false;
                 
                 if (markState.isDragging || markState.isResizing) {
-                    // 如果移動了位置或調整了大小，更新標記數據
+                    // 如果移動了位置或調整了大小，更新標記數據（含 PDF 座標左上、右下）
                     if (positionChanged || sizeChanged || markState.hasMoved) {
                         const updatedMark = marks[currentPage].find(m => m.id === mark.id);
                         if (updatedMark) {
@@ -6773,19 +6860,20 @@ function renderMarks() {
                             updatedMark.y = finalTop;
                             updatedMark.width = finalWidth;
                             updatedMark.height = finalHeight;
-                            
-                            // 如果調整了大小，重新提取文字
+                            const pdfCoords2 = viewportToPdfCoords(finalLeft, finalTop, finalWidth, finalHeight, currentPage);
+                            if (pdfCoords2) {
+                                updatedMark.pdfL = pdfCoords2.pdfL;
+                                updatedMark.pdfT = pdfCoords2.pdfT;
+                                updatedMark.pdfR = pdfCoords2.pdfR;
+                                updatedMark.pdfB = pdfCoords2.pdfB;
+                            }
                             if (markState.isResizing && sizeChanged) {
                                 updatedMark.text = extractTextFromMark(updatedMark, currentPage);
                                 console.log('標記大小已調整，重新提取文字:', updatedMark.text);
                             }
-                            
-                            // 靜默保存（不顯示彈窗）
-                            // 等待保存完成後再移除 dragging class，確保不會被重新渲染中斷
                             await saveMarksToPdf(false);
                         }
                     } else if (markState.isDragging && !markState.isResizing) {
-                        // 如果只是拖拽但沒有移動，標記需要觸發語音
                         shouldRead = true;
                     }
                 }
@@ -6793,11 +6881,9 @@ function renderMarks() {
                 markState.isDragging = false;
                 markState.isResizing = false;
                 markState.resizeDirection = null;
-                markState.hasMoved = false; // 重置移動標記
-                // 在保存完成後才移除 dragging class，確保保存過程中不會被重新渲染
+                markState.hasMoved = false;
                 markBlock.classList.remove('dragging');
                 
-                // 清理事件處理器引用
                 moveHandler2 = null;
                 endHandler2 = null;
                 escapeHandler2 = null;
