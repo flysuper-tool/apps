@@ -2790,3 +2790,206 @@ window.addEventListener('load', () => {
   window.addEventListener('resize', () => clampSecondaryToolbarIntoViewport());
 });
 
+// 工具列分區由 PDF.js 內建 JS 控制；這裡補一層「窄螢幕動態配置」，
+// 保證四顆自訂按鈕優先保留，不靠單純 CSS media query。
+window.addEventListener('load', () => {
+  const toolbarLeft = document.getElementById('toolbarViewerLeft');
+  if (!toolbarLeft) return;
+
+  const keepIds = [
+    'openFileTopLeft',
+    'fullPageReadButton',
+    'touchSelectToggleLabel',
+    'clearReadHighlightsButton',
+  ];
+  const candidateGetters = [
+    () => document.getElementById('sidebarToggleButton'),
+    () => document.getElementById('previous')?.closest('.toolbarHorizontalGroup'),
+    () => document.getElementById('pageNumber')?.closest('.toolbarHorizontalGroup'),
+  ];
+
+  function setShown(el, shown) {
+    if (!el) return;
+    el.style.display = shown ? '' : 'none';
+  }
+
+  function relayoutTopToolbar() {
+    // 搜尋與縮放已移到摺疊次選單：主工具列固定隱藏。
+    const findWrap = document.getElementById('viewFindButton')?.closest('.toolbarButtonWithContainer');
+    const toolbarMiddle = document.getElementById('toolbarViewerMiddle');
+    setShown(findWrap, false);
+    setShown(toolbarMiddle, false);
+
+    // 先重置：候選項全部顯示，再視空間逐步收斂。
+    candidateGetters.forEach(getEl => setShown(getEl(), true));
+    toolbarLeft.querySelectorAll('.toolbarButtonSpacer').forEach(sp => {
+      sp.style.width = '';
+    });
+
+    keepIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = '';
+      el.style.flex = '0 0 auto';
+      el.style.minWidth = 'max-content';
+      el.style.whiteSpace = 'nowrap';
+    });
+
+    // 若左區塊爆寬，先縮 spacer。
+    if (toolbarLeft.scrollWidth > toolbarLeft.clientWidth + 1) {
+      toolbarLeft.querySelectorAll('.toolbarButtonSpacer').forEach(sp => {
+        sp.style.width = '8px';
+      });
+    }
+
+    // 仍爆寬就依序收掉次要功能，保留四顆自訂按鈕。
+    for (const getEl of candidateGetters) {
+      if (toolbarLeft.scrollWidth <= toolbarLeft.clientWidth + 1) break;
+      setShown(getEl(), false);
+    }
+  }
+
+  relayoutTopToolbar();
+  window.addEventListener('resize', relayoutTopToolbar);
+});
+
+// 將主工具列的「搜尋、縮放」收納到右上摺疊次選單。
+window.addEventListener('load', () => {
+  const secondaryContainer = document.getElementById('secondaryToolbarButtonContainer');
+  if (!secondaryContainer) return;
+  if (document.getElementById('secondaryFindTrigger')) return;
+
+  const findWrap = document.getElementById('viewFindButton')?.closest('.toolbarButtonWithContainer');
+  const toolbarMiddle = document.getElementById('toolbarViewerMiddle');
+  if (findWrap) findWrap.style.display = 'none';
+  if (toolbarMiddle) toolbarMiddle.style.display = 'none';
+
+  const findBtn = document.getElementById('viewFindButton');
+  const findInput = document.getElementById('findInput');
+  const findPrevBtn = document.getElementById('findPreviousButton');
+  const findNextBtn = document.getElementById('findNextButton');
+  const zoomOutBtn = document.getElementById('zoomOutButton');
+  const zoomInBtn = document.getElementById('zoomInButton');
+  const scaleSelect = document.getElementById('scaleSelect');
+
+  const separator = document.createElement('div');
+  separator.className = 'horizontalToolbarSeparator';
+
+  const mkBtn = (id, text, onClick) => {
+    const btn = document.createElement('button');
+    btn.id = id;
+    btn.type = 'button';
+    btn.className = 'toolbarButton labeled';
+    btn.textContent = text;
+    btn.addEventListener('click', onClick);
+    return btn;
+  };
+
+  const secondaryFind = mkBtn('secondaryFindTrigger', '搜尋面板', () => {
+    findBtn?.click();
+  });
+  const secondaryZoomOut = mkBtn('secondaryZoomOutTrigger', '縮小', () => {
+    zoomOutBtn?.click();
+  });
+  const secondaryZoomIn = mkBtn('secondaryZoomInTrigger', '放大', () => {
+    zoomInBtn?.click();
+  });
+
+  const searchWrap = document.createElement('div');
+  searchWrap.id = 'secondarySearchWrap';
+  searchWrap.style.padding = '6px 12px';
+  searchWrap.style.display = 'flex';
+  searchWrap.style.alignItems = 'center';
+  searchWrap.style.gap = '6px';
+  const secondarySearchInput = document.createElement('input');
+  secondarySearchInput.id = 'secondaryFindInput';
+  secondarySearchInput.className = 'toolbarField';
+  secondarySearchInput.type = 'text';
+  secondarySearchInput.placeholder = '搜尋文字';
+  secondarySearchInput.style.flex = '1 1 auto';
+  secondarySearchInput.style.minWidth = '120px';
+  secondarySearchInput.style.height = '32px';
+  const secondaryPrev = document.createElement('button');
+  secondaryPrev.id = 'secondaryFindPrevTrigger';
+  secondaryPrev.type = 'button';
+  secondaryPrev.textContent = '▲';
+  secondaryPrev.addEventListener('click', () => {
+    findPrevBtn?.click();
+  });
+  const secondaryNext = document.createElement('button');
+  secondaryNext.id = 'secondaryFindNextTrigger';
+  secondaryNext.type = 'button';
+  secondaryNext.textContent = '▼';
+  secondaryNext.addEventListener('click', () => {
+    findNextBtn?.click();
+  });
+  secondaryPrev.style.minWidth = '0';
+  secondaryNext.style.minWidth = '0';
+  secondaryPrev.style.padding = '0 4px';
+  secondaryNext.style.padding = '0 4px';
+  secondaryPrev.style.border = 'none';
+  secondaryNext.style.border = 'none';
+  secondaryPrev.style.background = 'transparent';
+  secondaryNext.style.background = 'transparent';
+  secondaryPrev.style.fontSize = '16px';
+  secondaryNext.style.fontSize = '16px';
+  secondaryPrev.style.lineHeight = '1';
+  secondaryNext.style.lineHeight = '1';
+
+  if (findInput) {
+    secondarySearchInput.value = findInput.value || '';
+    secondarySearchInput.addEventListener('input', () => {
+      findInput.value = secondarySearchInput.value;
+      findInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    secondarySearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        findNextBtn?.click();
+      }
+    });
+    findInput.addEventListener('input', () => {
+      if (secondarySearchInput.value !== findInput.value) {
+        secondarySearchInput.value = findInput.value || '';
+      }
+    });
+  }
+  searchWrap.appendChild(secondarySearchInput);
+  searchWrap.appendChild(secondaryPrev);
+  searchWrap.appendChild(secondaryNext);
+
+  const scaleWrap = document.createElement('div');
+  scaleWrap.id = 'secondaryScaleWrap';
+  scaleWrap.style.padding = '6px 12px';
+  scaleWrap.style.display = 'flex';
+  scaleWrap.style.alignItems = 'center';
+  scaleWrap.style.gap = '8px';
+  const scaleLabel = document.createElement('span');
+  scaleLabel.textContent = '縮放';
+  scaleLabel.style.minWidth = '3em';
+  const secondaryScale = document.createElement('select');
+  secondaryScale.id = 'secondaryScaleSelect';
+  secondaryScale.className = 'toolbarField';
+  secondaryScale.style.width = '120px';
+  if (scaleSelect) {
+    secondaryScale.innerHTML = scaleSelect.innerHTML;
+    secondaryScale.value = scaleSelect.value;
+    secondaryScale.addEventListener('change', () => {
+      scaleSelect.value = secondaryScale.value;
+      scaleSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    scaleSelect.addEventListener('change', () => {
+      secondaryScale.value = scaleSelect.value;
+    });
+  }
+  scaleWrap.appendChild(scaleLabel);
+  scaleWrap.appendChild(secondaryScale);
+
+  secondaryContainer.appendChild(separator);
+  secondaryContainer.appendChild(secondaryFind);
+  secondaryContainer.appendChild(searchWrap);
+  secondaryContainer.appendChild(secondaryZoomOut);
+  secondaryContainer.appendChild(secondaryZoomIn);
+  secondaryContainer.appendChild(scaleWrap);
+});
+

@@ -5558,41 +5558,14 @@ body,
   }
 }
 
-/* 響應式：窄螢幕優先保留右上「工具」摺疊按鈕 */
-@media all and (max-width: 1280px){
-  #touchSelectToggleLabel{
-    display:none !important;
-  }
-}
-
-@media all and (max-width: 1120px){
-  #clearReadHighlightsButton{
-    display:none !important;
-  }
-}
-
-@media all and (max-width: 980px){
-  /* iPad/窄螢幕優先保留自訂 4 按鈕，不在這裡隱藏 */
-  #viewFindButton,
-  #previous,
-  #next,
-  #pageNumber,
-  #numPages{
-    display:none !important;
-  }
-
-  #toolbarContainer #toolbarViewer .toolbarButtonSpacer{
-    width:8px;
-  }
-
-  #openFileTopLeft,
-  #fullPageReadButton,
-  #touchSelectToggleLabel,
-  #clearReadHighlightsButton{
-    flex:0 0 auto;
-    min-width:max-content;
-    white-space:nowrap;
-  }
+/* 這四顆按鈕由 JS 依可用空間動態配置，避免固定 media query 導致 iPad 消失 */
+#openFileTopLeft,
+#fullPageReadButton,
+#touchSelectToggleLabel,
+#clearReadHighlightsButton{
+  flex:0 0 auto;
+  min-width:max-content;
+  white-space:nowrap;
 }
 
 /* SweetAlert2 視窗浮在 PDF viewer 之上，且不遮蔽背景 */
