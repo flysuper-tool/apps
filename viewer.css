@@ -5572,10 +5572,26 @@ body,
 }
 
 @media all and (max-width: 980px){
+  /* iPad/窄螢幕優先保留自訂 4 按鈕，不在這裡隱藏 */
+  #viewFindButton,
+  #previous,
+  #next,
+  #pageNumber,
+  #numPages{
+    display:none !important;
+  }
+
+  #toolbarContainer #toolbarViewer .toolbarButtonSpacer{
+    width:8px;
+  }
+
   #openFileTopLeft,
   #fullPageReadButton,
-  #fullPagePauseButton{
-    display:none !important;
+  #touchSelectToggleLabel,
+  #clearReadHighlightsButton{
+    flex:0 0 auto;
+    min-width:max-content;
+    white-space:nowrap;
   }
 }
 
