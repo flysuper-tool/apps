@@ -728,13 +728,34 @@
     }
   }
 
+  function normalizeOriginalTextForDisplay(text) {
+    const raw = (text || '').trim();
+    if (!raw) return '';
+    const normalizeFn = window.normalizeCircledDigitsForTts;
+    if (typeof normalizeFn === 'function') {
+      try {
+        return (normalizeFn(raw) || '').trim();
+      } catch (_) {
+        return raw;
+      }
+    }
+    return raw;
+  }
+
   async function editMarkReplacementText(markId, pageNum) {
     const k = mkey(pageNum);
     const mark = marks[k]?.find(m => m.id === markId);
     if (!mark) return;
 
-    mark.text = extractTextFromMark(mark, pageNum);
-    let displayText = mark.text || '(無文字)';
+    // 以「編輯視窗當下看到的原始文字」作為後續朗讀基準（即使未按儲存替換文字也要落檔）。
+    const textBeforeEdit = normalizeOriginalTextForDisplay(mark.text || '');
+    const extractedNow = normalizeOriginalTextForDisplay(extractTextFromMark(mark, pageNum) || '');
+    let displayText = extractedNow || textBeforeEdit || '(無文字)';
+    const effectiveOriginalText = displayText === '(無文字)' ? '' : displayText;
+    const originalTextChanged = effectiveOriginalText !== textBeforeEdit;
+    if (originalTextChanged) {
+      mark.text = effectiveOriginalText;
+    }
     if (displayText !== '(無文字)') {
       displayText = displayText.replace(/^[\s\t\u3000]+/, '');
     }
@@ -1025,6 +1046,9 @@
 
     if (result.isConfirmed) {
       mark.replacementText = result.value;
+      if (displayText && displayText !== '(無文字)') {
+        mark.text = displayText;
+      }
       await saveMarksToPdf(false);
       window.Swal.fire({
         icon: 'success',
@@ -1034,6 +1058,9 @@
         showConfirmButton: false,
         customClass: { popup: 'swal-high-z-index' },
       });
+    } else if (originalTextChanged) {
+      // 就算未儲存替換文字，也要把本次編輯視窗確認過的原始文字落檔。
+      await saveMarksToPdf(false);
     }
 
     const markLayerCleanup = document.querySelector(`.mark-layer[data-page-num="${pageNum}"]`);
@@ -1053,7 +1080,13 @@
     const mark = marks[k]?.find(m => m.id === markId);
     if (!mark) return;
     let text = (mark.replacementText || '').trim();
-    if (!text) text = extractTextFromMark(mark, pageNum);
+    // 朗讀以「已儲存文字」為準（編輯替換文字視窗中的內容），避免即時重新擷取造成跨行誤讀。
+    if (!text) text = (mark.text || '').trim();
+    if (!text) {
+      text = extractTextFromMark(mark, pageNum);
+      mark.text = text;
+      await saveMarksToPdf(false);
+    }
     if (!text) {
       await ensureSwalLocal();
       window.Swal?.fire({ icon: 'info', title: '無文字', text: '此區塊未偵測到可朗讀文字' });
@@ -1726,6 +1759,7 @@
         locked: false,
         ...(pcoords || {}),
       };
+      newMark.text = extractTextFromMark(newMark, pageNum) || '';
       marks[pk].push(newMark);
       block.remove();
       renderMarksPage(pageNum);
@@ -2066,6 +2100,9 @@
                 <p style="margin-top: 15px;">
                     <strong>補充模式</strong>：AI 將模仿現有標記風格，只補充未標記的區域，保留所有現有標記<br>
                     <strong>重新標記</strong>：刪除所有現有標記，重新進行 AI 標記
+                </p>
+                <p style="margin-top: 12px; color:#8a5a00; line-height:1.6;">
+                    <strong>提醒：</strong>AI 標記無法保證 100% 完整。遇到圖片、掃描件或特殊排版格式時，可能有部分內容無法被 AI 正確框選，請再以手動標記補齊。
                 </p>
             `,
         showCancelButton: true,
@@ -2439,6 +2476,17 @@ ${fullText.trim()}${existingHint}
       renderMarksAllPages();
       refreshAllMarkVisuals();
       if (totalCreatedMarksCount > 0) {
+        // AI 完成後立即切到可視/可編輯狀態，避免需先取消標記再重進才看得到區塊。
+        isManualMarkingEnabled = true;
+        setTextLayersPointerEvents('none');
+        document.querySelectorAll('.mark-layer').forEach(l => {
+          l.classList.add('marking-mode');
+          l.style.pointerEvents = 'auto';
+        });
+        bindManualMarkingPointerHandlers();
+        renderMarksAllPages();
+        refreshAllMarkVisuals();
+
         await saveMarksToPdf(true);
         await Swal.fire({
           icon: 'success',

@@ -1446,7 +1446,13 @@
     const ir = Math.min(gr, frame.right);
     const it = Math.max(gt, frame.top);
     const ib = Math.min(gb, frame.bottom);
-    return ir > il && ib > it;
+    const iw = ir - il;
+    const ih = ib - it;
+    if (iw <= 0 || ih <= 0) return false;
+    // 與標記文字抽取門檻一致：需覆蓋到字元框一定比例，避免只擦到下緣就被高亮。
+    const overlapArea = iw * ih;
+    const glyphArea = Math.max(1e-6, (gr - gl) * (gb - gt));
+    return overlapArea / glyphArea >= 0.45;
   }
 
   function buildTextLayerRectFromClientFrame(pageNumber, frameRect) {
@@ -2369,6 +2375,10 @@
     out = out.replace(/，{2,}/g, '，');
 
     return out;
+  }
+
+  if (typeof window !== 'undefined') {
+    window.normalizeCircledDigitsForTts = normalizeCircledDigitsForTts;
   }
 
   window.sendTextToTTS = async function (selectedText, callback, options) {
