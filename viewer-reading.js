@@ -1651,6 +1651,21 @@
     }
 
     const openModal = async () => {
+      if (document.body.classList.contains('marking-mode-active')) {
+        await ensureSwal();
+        if (window.Swal) {
+          window.Swal.fire({
+            icon: 'info',
+            title: '標記模式中',
+            text: '請先離開「標記區塊」模式，再開啟進階設定。',
+            backdrop: false,
+            customClass: { popup: 'swal-high-z-index' },
+          });
+        } else {
+          alert('請先離開「標記區塊」模式，再開啟進階設定。');
+        }
+        return;
+      }
       const storedKey = await loadGeminiApiKey();
       currentStoredApiKey = storedKey || '';
       // 輸入時一律隱藏明碼，用星號顯示
