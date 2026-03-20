@@ -1593,6 +1593,11 @@
   function tryHandleMarkHitAtClientPoint(e) {
     if (isManualMarkingEnabled) return;
     if (e.button !== 0 && e.button !== undefined) return;
+    // 有任何前景彈窗時，不處理底層標記點擊，避免按彈窗按鈕時誤觸發朗讀。
+    const apiKeyModal = document.getElementById('apiKeyModal');
+    const apiKeyModalOpen = !!(apiKeyModal && getComputedStyle(apiKeyModal).display !== 'none');
+    const swalContainerOpen = !!document.querySelector('.swal2-container:not([style*="display: none"])');
+    if (apiKeyModalOpen || swalContainerOpen) return;
     const cx = e.clientX;
     const cy = e.clientY;
     const vc = document.getElementById('viewerContainer');
