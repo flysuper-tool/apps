@@ -2545,7 +2545,7 @@ ${fullText.trim()}${existingHint}
     bindManualMarkingPointerHandlers();
   }
 
-  function exitMarkingMode() {
+  function exitMarkingMode(shouldReload = false) {
     isMarkingMode = false;
     isManualMarkingEnabled = false;
     currentSessionPassword = null;
@@ -2581,6 +2581,12 @@ ${fullText.trim()}${existingHint}
     // 無論是否雲端，都重建一次標記節點與事件綁定，避免編輯流程後殘留舊 DOM 導致點擊不發音
     renderMarksAllPages();
     refreshAllMarkVisuals();
+
+    if (shouldReload) {
+      setTimeout(() => {
+        window.location.reload();
+      }, 0);
+    }
   }
 
   async function toggleMarkingModeFromUi() {
@@ -2656,7 +2662,7 @@ ${fullText.trim()}${existingHint}
       initMarkFeatureBindings._uiBound = true;
       document.getElementById('markBlockButton')?.addEventListener('click', toggleMarkingModeFromUi);
       document.getElementById('cancelMarkingButtonToolbar')?.addEventListener('click', () => {
-        if (isMarkingMode) exitMarkingMode();
+        if (isMarkingMode) exitMarkingMode(true);
       });
       document.getElementById('manualMarkButtonToolbar')?.addEventListener('click', e => {
         e.preventDefault();
