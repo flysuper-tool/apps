@@ -2413,7 +2413,8 @@ function collapseAdjacentDuplicateRunsForTts(s, options) {
                     reps++;
                     j += len;
                 }
-                if (reps < 2) continue;
+                // 2 字以上片段至少重複 3 次才收斂，避免「很久很久」等合法疊詞被誤刪
+                if (reps < 3) continue;
                 if (len === 1 && reps < 4) continue;
                 parts.push(chunk);
                 i = j;
